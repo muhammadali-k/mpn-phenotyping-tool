@@ -1,0 +1,439 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowRight, Copy, Download, FlaskConical, Loader2, Printer, Sparkles } from 'lucide-react'
+import {
+  callLLM, diagnose, EXAMPLES, FIELDS, FIELD_BY_KEY, GROUP_LABEL, GROUP_ORDER,
+  normalizeExtraction, prognose, type ClassifyResult, type Extraction, type SourceTag, type VarValue, type Variables,
+} from '@/lib/engine'
+import { useApp } from '@/lib/store'
+import { Button, Eyebrow, StepMarker } from '@/components/ui/primitives'
+import { VarField } from './fields'
+import { DeidPanel } from './DeidPanel'
+import { Results } from './Results'
+import { cx, fmtValue } from '@/lib/util'
+
+type Step = 1 | 2 | 3
+const EMPTY_EXTRACT: Extraction = { variables: {}, sources: {}, fields: {}, needsReview: [], rationale: '', impression: '' }
+
+function sameValue(a: VarValue, b: VarValue): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x) => b.includes(x))
+  return String(a) === String(b)
+}
+
+export function Tool() {
+  const { config, setKeyModalOpen } = useApp()
+  const [step, setStepRaw] = useState<Step>(1)
+  const stepRef = useRef<HTMLDivElement>(null)
+  const firstRender = useRef(true)
+  const setStep = (s: Step) => setStepRaw(s)
+  const [note, setNote] = useState('')
+  const [path, setPath] = useState('')
+  const [attested, setAttested] = useState(false)
+  const [onFile, setOnFile] = useState<Variables>({}) // structured "on file" (example)
+  const [extracted, setExtracted] = useState<Extraction>(EMPTY_EXTRACT)
+  const [lastExtract, setLastExtract] = useState<{ provider: string; model: string } | null>(null)
+  const [form, setForm] = useState<Record<string, VarValue | undefined>>({})
+  const [result, setResult] = useState<ClassifyResult | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState('')
+  const toastTimer = useRef<number | undefined>(undefined)
+
+  const flash = (m: string) => {
+    setToast(m); window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(''), 2400)
+  }
+  // clear pending toast timer on unmount
+  useEffect(() => () => window.clearTimeout(toastTimer.current), [])
+  // move focus to the new step's container on transition (skip initial mount)
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return }
+    stepRef.current?.focus()
+  }, [step])
+
+  const hasText = (note + path).trim().length > 0
+  const extractReady = attested && hasText && !!config.key
+
+  function reset() {
+    setNote(''); setPath(''); setAttested(false); setOnFile({}); setExtracted(EMPTY_EXTRACT)
+    setLastExtract(null); setForm({}); setResult(null); setError('')
+  }
+
+  function loadExample(k: keyof typeof EXAMPLES) {
+    const inp = EXAMPLES[k].inputs
+    setNote(inp.clinical_note || ''); setPath(inp.pathology_report || '')
+    const structured: Variables = {}
+    Object.keys(inp).forEach((key) => {
+      if (key === 'clinical_note' || key === 'pathology_report') return
+      if (FIELD_BY_KEY[key]) structured[key] = inp[key] as VarValue
+    })
+    setOnFile(structured); setExtracted(EMPTY_EXTRACT); setAttested(true); setError('')
+    flash(`Loaded ${EXAMPLES[k].label}`)
+  }
+
+  function initForm(ext: Extraction, base: Variables) {
+    const f: Record<string, VarValue | undefined> = {}
+    FIELDS.forEach((field) => {
+      const k = field.key
+      f[k] = base[k] !== undefined ? base[k] : ext.variables[k]
+    })
+    setForm(f)
+  }
+
+  async function runExtraction() {
+    setBusy(true); setError('')
+    try {
+      const inputs = { ...onFile, clinical_note: note, pathology_report: path }
+      const res = await callLLM(config, inputs)
+      const ext = normalizeExtraction(res.raw, note + '\n' + path)
+      setExtracted(ext)
+      setLastExtract({ provider: res.provider, model: res.model })
+      initForm(ext, onFile)
+      flash(`Extracted ${Object.keys(ext.variables).length} variable${Object.keys(ext.variables).length === 1 ? '' : 's'}`)
+      setStep(2)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function skipToForm() {
+    setExtracted(EMPTY_EXTRACT)
+    initForm(EMPTY_EXTRACT, onFile)
+    setStep(2)
+  }
+
+  function runDiagnosis() {
+    // form is authoritative: cleared fields override extraction, provenance preserved
+    const variables: Variables = {}
+    const sources: Record<string, SourceTag> = {}
+    Object.keys(form).forEach((k) => {
+      const v = form[k]
+      if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) return
+      variables[k] = v
+      // on-file structured value wins provenance (structured › pathology › note)
+      if (onFile[k] !== undefined && sameValue(onFile[k], v)) {
+        sources[k] = 'structured'
+      } else {
+        const ext = extracted.variables[k]
+        const unchanged = ext !== undefined && sameValue(ext, v)
+        sources[k] = unchanged ? (extracted.sources[k] || 'note') : 'structured'
+      }
+    })
+    const dx = diagnose(variables)
+    const prog = prognose(dx, variables)
+    setResult({ merged: { variables, sources }, diagnosis: dx, prognosis: prog })
+    setStep(3)
+  }
+
+  const stepDefs: { n: string; label: string }[] = [
+    { n: '01', label: 'Paste note' },
+    { n: '02', label: 'Review variables' },
+    { n: '03', label: 'Diagnosis + prognosis' },
+  ]
+
+  // a step is reachable if it's at or before the current step, or is an
+  // already-computed step (2 or 3 once a result exists).
+  const canGo = (i: number) => i + 1 <= step || (!!result && (i === 1 || i === 2))
+
+  return (
+    <div className="app-frame corners relative rounded-[14px] bg-surface">
+      <span className="cm tl" aria-hidden /><span className="cm tr" aria-hidden />
+      <span className="cm bl" aria-hidden /><span className="cm br" aria-hidden />
+
+      <div className="overflow-hidden rounded-[14px]">
+        {/* frame header — step markers */}
+        <nav aria-label="Workflow steps" className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line px-5 py-3.5 sm:gap-x-6 sm:px-6 md:px-7">
+          {stepDefs.map((s, i) => (
+            <button key={s.n} type="button"
+              onClick={() => { if (canGo(i)) setStep((i + 1) as Step) }}
+              disabled={!canGo(i)}
+              aria-current={step === i + 1 ? 'step' : undefined}
+              className={cx('transition-opacity', !canGo(i) && 'opacity-45')}
+            >
+              <StepMarker n={s.n} label={s.label} active={step === i + 1} />
+            </button>
+          ))}
+          <div className="flex-1" />
+          <button type="button" onClick={() => setKeyModalOpen(true)} className="inline-flex items-center gap-2 font-mono text-[11.5px] text-muted transition-colors hover:text-ink">
+            <span className={cx('inline-block h-[7px] w-[7px] rounded-full', config.key ? 'bg-success' : 'bg-faint')} aria-hidden />
+            {config.key ? config.provider : 'set up model'}
+          </button>
+        </nav>
+
+        <div className="scroll p-5 sm:p-6 md:p-7">
+          <div key={step} ref={stepRef} tabIndex={-1} className="step-in outline-none">
+            {step === 1 && (
+            <StepReports
+              note={note} path={path} setNote={setNote} setPath={setPath}
+              attested={attested} setAttested={setAttested}
+              onLoadExample={loadExample} onClear={reset}
+              extractReady={extractReady} busy={busy} error={error}
+              hasKey={!!config.key} hasText={hasText}
+              onExtract={runExtraction} onSkip={skipToForm}
+              onApplyRedaction={(n, p) => { setNote(n); setPath(p) }}
+            />
+          )}
+          {step === 2 && (
+            <StepVariables
+              form={form} setForm={setForm} extracted={extracted} onFile={onFile} lastExtract={lastExtract}
+              onBack={() => setStep(1)} onRun={runDiagnosis}
+            />
+          )}
+            {step === 3 && result && (
+              <StepResults result={result} extracted={extracted} lastExtract={lastExtract} onBack={() => setStep(2)} onCopy={() => flash('Summary copied')} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* persistent live region so screen readers hear status changes */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{toast}</div>
+      {toast && (
+        <div aria-hidden className="toast-in pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-[13px] text-surface shadow-[var(--frame-shadow)]">
+          {toast}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ============================================================ Step 1 */
+function StepReports(props: {
+  note: string; path: string; setNote: (s: string) => void; setPath: (s: string) => void
+  attested: boolean; setAttested: (b: boolean) => void
+  onLoadExample: (k: keyof typeof EXAMPLES) => void; onClear: () => void
+  extractReady: boolean; busy: boolean; error: string; hasKey: boolean; hasText: boolean
+  onExtract: () => void; onSkip: () => void; onApplyRedaction: (n: string, p: string) => void
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const ta = 'scroll min-h-[130px] w-full resize-y rounded-[6px] border border-line-strong bg-surface2 px-3.5 py-3 text-[14px] leading-[1.6] outline-none transition-colors focus:border-focus focus:bg-surface'
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <Eyebrow>Clinical note &amp; pathology report</Eyebrow>
+          <div className="relative" onKeyDown={(e) => { if (e.key === 'Escape') setMenuOpen(false) }}>
+            <Button variant="outline" size="sm" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
+              <FlaskConical aria-hidden size={14} /> Load example
+            </Button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" aria-hidden onClick={() => setMenuOpen(false)} />
+                <div role="menu" aria-label="Load example case" className="absolute right-0 z-20 mt-1.5 w-60 rounded-[8px] border border-line-strong bg-surface p-1.5 shadow-[var(--shadow-sm)]">
+                  {(Object.keys(EXAMPLES) as (keyof typeof EXAMPLES)[]).map((k, i) => (
+                    <button key={k} type="button" role="menuitem" autoFocus={i === 0} onClick={() => { props.onLoadExample(k); setMenuOpen(false) }}
+                      className="block w-full rounded-[6px] px-3 py-2 text-left text-[13.5px] transition-colors hover:bg-surface2 focus:bg-surface2">
+                      {EXAMPLES[k].label}
+                      <span className="block font-mono text-[10.5px] text-faint">synthetic · no PHI</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="mb-1.5 flex items-baseline gap-2"><span className="text-[12.5px] font-medium text-muted">Clinical note</span><span className="font-mono text-[10.5px] text-faint">optional</span></span>
+          <textarea className={ta} placeholder="Paste a de-identified clinical / hematology note…" value={props.note} onChange={(e) => props.setNote(e.target.value)} />
+        </label>
+        <label className="mt-4 block">
+          <span className="mb-1.5 flex items-baseline gap-2"><span className="text-[12.5px] font-medium text-muted">Pathology / bone-marrow biopsy report</span><span className="font-mono text-[10.5px] text-faint">optional</span></span>
+          <textarea className={ta} placeholder="Paste a de-identified pathology or bone-marrow report…" value={props.path} onChange={(e) => props.setPath(e.target.value)} />
+        </label>
+
+        <DeidPanel note={props.note} path={props.path} onApplyRedaction={props.onApplyRedaction} />
+
+        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-[8px] border border-line-strong bg-surface px-4 py-3">
+          <input type="checkbox" checked={props.attested} onChange={(e) => props.setAttested(e.target.checked)} className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-accent" />
+          <span className="text-[13px] text-muted"><strong className="text-ink">I confirm this text is de-identified.</strong> It contains no names, MRNs, dates of birth, contact details or other direct identifiers, and I am authorized to process it with a third-party model.</span>
+        </label>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+          <Button
+            onClick={props.onExtract}
+            disabled={!props.extractReady || props.busy}
+            title={!props.hasText ? 'Paste a note or report first' : !props.attested ? 'Confirm de-identification first' : !props.hasKey ? 'Add an API key first' : 'Extract structured variables'}
+          >
+            {props.busy ? <Loader2 aria-hidden size={15} className="animate-spin" /> : <Sparkles aria-hidden size={15} />}
+            {props.busy ? 'Extracting…' : 'Extract with AI'}
+          </Button>
+          <Button variant="outline" onClick={props.onSkip}>Skip — enter data manually</Button>
+          <div className="flex-1" />
+          <Button variant="ghost" size="sm" onClick={props.onClear}>Clear</Button>
+        </div>
+        {props.error && (
+          <div role="alert" className="mt-3.5 rounded-[8px] bg-[color-mix(in_srgb,var(--c-danger)_12%,transparent)] px-4 py-3 text-[13px] text-danger">
+            {props.error}
+          </div>
+        )}
+      </div>
+
+      <aside className="rounded-[10px] border border-line bg-surface2 p-5">
+        <Eyebrow>How it works</Eyebrow>
+        <ol className="mt-3 space-y-3 text-[13px] text-muted">
+          {[
+            <><strong className="text-ink">De-identify &amp; paste</strong> a clinical note and/or pathology report — both optional.</>,
+            <>Your chosen model (<strong className="text-ink">OpenAI</strong>, <strong className="text-ink">Claude</strong>, or <strong className="text-ink">Gemini</strong>) extracts structured variables, called browser-direct with your own key. No server, no storage.</>,
+            <><strong className="text-ink">Review &amp; complete</strong> the structured form; findings that are pending or not documented are left for you to confirm — never assumed negative.</>,
+            <>Get an independent <strong className="text-ink">WHO 2016/2022 assessment</strong> of PV, ET, and overt MF — confirmed, suspicious, or not — plus <strong className="text-ink">prognostic scoring</strong> once a diagnosis is confirmed, each traced to its source.</>,
+          ].map((t, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="mt-[1px] font-mono text-[11px] font-medium text-faint tnum">{String(i + 1).padStart(2, '0')}</span>
+              <span>{t}</span>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-5 rounded-[8px] border border-line bg-surface px-4 py-3 text-[12.5px] text-muted">
+          <span className="text-info">No note?</span> Skip extraction and enter structured data directly — diagnosis works from structured variables alone.
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+/* ============================================================ Step 2 */
+function StepVariables({ form, setForm, extracted, onFile, lastExtract, onBack, onRun }: {
+  form: Record<string, VarValue | undefined>
+  setForm: (f: Record<string, VarValue | undefined>) => void
+  extracted: Extraction; onFile: Variables; lastExtract: { provider: string; model: string } | null
+  onBack: () => void; onRun: () => void
+}) {
+  const setField = (k: string, v: VarValue | undefined) => setForm({ ...form, [k]: v })
+  const sourceOf = (k: string): SourceTag | null => {
+    const v = form[k]
+    if (v === undefined) return null
+    if (onFile[k] !== undefined && sameValue(onFile[k], v)) return 'structured'
+    const ext = extracted.variables[k]
+    if (ext !== undefined && sameValue(ext, v)) return extracted.sources[k] || 'note'
+    return 'structured'
+  }
+  const extractedKeys = Object.keys(extracted.variables)
+
+  return (
+    <div>
+      <Eyebrow>Step 02 · source priority: structured › pathology › note</Eyebrow>
+      <h3 className="mt-1.5 font-display text-[28px] leading-tight tracking-[-0.015em]">Review &amp; complete structured variables</h3>
+      <p className="mt-1.5 max-w-[70ch] text-[14px] text-muted">
+        Values extracted from free text are pre-filled and tagged by source. Edit anything, and add whatever labs, molecular, and cytogenetic data you have — the more complete the inputs, the more criteria can be assessed and the applicable prognostic model applied. A blank field is treated as unavailable, not negative.
+      </p>
+
+      {extractedKeys.length > 0 && (
+        <div className="mt-4 rounded-[10px] border border-line bg-surface2 p-4">
+          {lastExtract && <Eyebrow>Extracted by {lastExtract.provider} · {lastExtract.model}</Eyebrow>}
+          {extracted.impression && <p className="mt-2 text-[13px] text-muted"><strong className="text-ink">Report impression:</strong> {extracted.impression}</p>}
+          {extracted.rationale && <p className="mt-1.5 text-[12.5px] text-muted"><strong className="text-ink">Model rationale:</strong> {extracted.rationale}</p>}
+          <div className="mt-2 font-mono text-[11px] text-faint tnum">{extractedKeys.length} variable{extractedKeys.length === 1 ? '' : 's'} extracted from free text</div>
+        </div>
+      )}
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        {GROUP_ORDER.map((group) => (
+          <div key={group} className="rounded-[10px] border border-line bg-surface">
+            <div className="border-b border-line px-4 py-3"><h4 className="text-[14px] font-semibold">{GROUP_LABEL[group]}</h4></div>
+            <div className="space-y-4 px-4 py-4">
+              {FIELDS.filter((f) => f.group === group).map((f) => (
+                <VarField key={f.key} field={f} value={form[f.key]} source={sourceOf(f.key)} onChange={(v) => setField(f.key, v)} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-2.5">
+        <Button variant="ghost" onClick={onBack}>← Back to reports</Button>
+        <div className="flex-1" />
+        <Button onClick={onRun}>Run diagnosis &amp; prognosis <ArrowRight aria-hidden size={15} /></Button>
+      </div>
+    </div>
+  )
+}
+
+/* ============================================================ Step 3 */
+function StepResults({ result, extracted, lastExtract, onBack, onCopy }: {
+  result: ClassifyResult; extracted: Extraction; lastExtract: { provider: string; model: string } | null
+  onBack: () => void; onCopy: () => void
+}) {
+  const summary = useMemo(() => buildSummary(result), [result])
+
+  const copy = async () => {
+    try {
+      if (navigator.clipboard) await navigator.clipboard.writeText(summary)
+      else throw new Error('no clipboard')
+    } catch {
+      const ta = document.createElement('textarea'); ta.value = summary; document.body.appendChild(ta); ta.select()
+      try { document.execCommand('copy') } catch { /* ignore */ }
+      ta.remove()
+    }
+    onCopy()
+  }
+
+  const exportJSON = () => {
+    const payload = {
+      diagnosis: result.diagnosis, prognosis: result.prognosis, resolved: result.merged,
+      extraction: { provider: lastExtract, impression: extracted.impression, rationale: extracted.rationale },
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `mpn-phenotyping-${result.diagnosis.code || 'result'}.json`
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-2.5">
+        <Button variant="ghost" size="sm" onClick={onBack}>← Edit variables</Button>
+        <div className="flex-1" />
+        <Button variant="outline" size="sm" onClick={copy}><Copy aria-hidden size={14} /> Copy summary</Button>
+        <Button variant="outline" size="sm" onClick={exportJSON}><Download aria-hidden size={14} /> Export JSON</Button>
+        <Button variant="outline" size="sm" onClick={() => window.print()}><Printer aria-hidden size={14} /> Print</Button>
+      </div>
+      <Results result={result} extraction={extracted} />
+    </div>
+  )
+}
+
+function buildSummary(r: ClassifyResult): string {
+  const { diagnosis: dx, prognosis: prog, merged } = r
+  const L: string[] = []
+  L.push('MPN PHENOTYPING — investigational output')
+  L.push('='.repeat(44))
+  L.push(`Diagnostic assessment (${dx.whoEdition}): ${dx.headline}`)
+  L.push(`Summary: ${dx.summary}`)
+  L.push('')
+  L.push('Per-disease criteria (independent assessment):')
+  dx.assessments.forEach((a) => {
+    L.push(`  ${a.name} (${a.disease}) — ${a.label}`)
+    a.criteria.forEach((c) => {
+      const m = c.status === 'met' ? '[x]' : c.status === 'not_met' ? '[ ]' : '[?]'
+      L.push(`    ${m} (${c.tier}) ${c.label}${c.detail ? '  — ' + c.detail : ''}`)
+    })
+    if (a.verdict === 'suspicious' && a.outstanding.length) {
+      L.push(`    Additional information required: ${a.outstanding.join('; ')}`)
+    }
+  })
+  if (dx.caveats.length) {
+    L.push(''); L.push('Caveats:')
+    dx.caveats.forEach((c) => L.push(`  - ${c}`))
+  }
+  L.push(''); L.push('Prognostic assessment:')
+  if (prog.gatedReason) {
+    L.push(`  Prognostic category not established — ${prog.gatedReason === 'suspicious' ? 'diagnosis not confirmed' : prog.gatedReason === 'conflict' ? 'diagnostic conflict' : 'no confirmed MPN'}. No prognostic scoring performed.`)
+  } else {
+    prog.order.forEach((k) => {
+      const t = prog.tools[k]; if (!t) return
+      const star = k === prog.primaryKey ? '* ' : '  '
+      if (t.status === 'established') L.push(`  ${star}${t.name}: ${t.category}${t.total != null ? ` (${t.total} pts)` : ''}`)
+      else L.push(`  ${star}${t.name}: category not established${t.requiredMissing.length ? ` (missing: ${t.requiredMissing.join(', ')})` : ''}`)
+    })
+  }
+  L.push(''); L.push('Resolved variables (structured › pathology › note):')
+  Object.keys(merged.variables).forEach((k) => {
+    const f = FIELD_BY_KEY[k]; if (!f) return
+    L.push(`  ${f.label}: ${fmtValue(merged.variables[k])}  [${merged.sources[k] || 'note'}]`)
+  })
+  L.push(''); L.push('Not a medical device. Verify with a hematologist.')
+  return L.join('\n')
+}
