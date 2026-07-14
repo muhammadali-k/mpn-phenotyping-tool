@@ -22,7 +22,7 @@ function sameValue(a: VarValue, b: VarValue): boolean {
 }
 
 export function Tool() {
-  const { config, setKeyModalOpen } = useApp()
+  const { config, setConfig, setKeyModalOpen } = useApp()
   const [step, setStepRaw] = useState<Step>(1)
   const stepRef = useRef<HTMLDivElement>(null)
   const firstRender = useRef(true)
@@ -65,6 +65,8 @@ export function Tool() {
   const hasCredential = keyless || !!config.key
   const ackOk = onDevice || llmAcknowledged
   const extractReady = attested && hasText && hasCredential && ackOk
+  const providerInfo = PROVIDERS[config.provider]
+  const providerName = providerInfo.label.split(' — ')[0].split(' (')[0]
 
   function reset() {
     setNote(''); setPath(''); setAttested(false); setOnFile({}); setExtracted(EMPTY_EXTRACT)
@@ -203,8 +205,10 @@ export function Tool() {
               onLoadExample={loadExample} onClear={reset}
               extractReady={extractReady} busy={busy} error={error}
               hasCredential={hasCredential} keyless={keyless} ackOk={ackOk} hasText={hasText}
+              providerName={providerName} getKeyUrl={providerInfo.getKeyUrl}
               progressText={progressText}
               onExtract={runExtraction} onChangeEntryMode={() => setEntryModalOpen(true)}
+              onOpenKeyModal={() => setKeyModalOpen(true)}
               onApplyRedaction={(n, p) => { setNote(n); setPath(p) }}
             />
           )}
@@ -233,8 +237,10 @@ export function Tool() {
         onOpenChange={setEntryModalOpen}
         provider={config.provider}
         model={config.model}
+        hasKey={!!config.key}
         onChoose={chooseEntryMode}
         onOpenProviderSettings={() => setKeyModalOpen(true)}
+        onUsePuter={() => setConfig({ provider: 'puter', key: '', model: PROVIDERS.puter.defaultModel })}
       />
     </div>
   )
@@ -246,8 +252,9 @@ function StepReports(props: {
   attested: boolean; setAttested: (b: boolean) => void
   onLoadExample: (k: keyof typeof EXAMPLES) => void; onClear: () => void
   extractReady: boolean; busy: boolean; error: string; hasCredential: boolean; keyless: boolean; ackOk: boolean; hasText: boolean
+  providerName: string; getKeyUrl?: string
   progressText: string
-  onExtract: () => void; onChangeEntryMode: () => void; onApplyRedaction: (n: string, p: string) => void
+  onExtract: () => void; onChangeEntryMode: () => void; onOpenKeyModal: () => void; onApplyRedaction: (n: string, p: string) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const ta = 'scroll min-h-[130px] w-full resize-y rounded-[6px] border border-line-strong bg-surface2 px-3.5 py-3 text-[14px] leading-[1.6] outline-none transition-colors focus:border-focus focus:bg-surface'
@@ -297,7 +304,7 @@ function StepReports(props: {
           <Button
             onClick={props.onExtract}
             disabled={!props.extractReady || props.busy}
-            title={!props.hasText ? 'Paste a note or report first' : !props.attested ? 'Confirm de-identification first' : !props.ackOk ? 'Confirm the data-sharing acknowledgment first' : !props.hasCredential && !props.keyless ? 'Add an API key first' : 'Extract structured variables'}
+            title={!props.hasText ? 'Paste a note or report first' : !props.attested ? 'Confirm de-identification first' : !props.ackOk ? 'Confirm the data-sharing acknowledgment first' : !props.hasCredential && !props.keyless ? `Add your free ${props.providerName} key first` : 'Extract structured variables'}
           >
             {props.busy ? <Loader2 aria-hidden size={15} className="animate-spin" /> : <Sparkles aria-hidden size={15} />}
             {props.busy ? 'Extracting…' : 'Extract with AI'}
@@ -306,6 +313,26 @@ function StepReports(props: {
           <div className="flex-1" />
           <Button variant="ghost" size="sm" onClick={props.onClear}>Clear</Button>
         </div>
+        {!props.hasCredential && !props.keyless && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted">
+            <span>{props.providerName} needs a one-time free key (no credit card).</span>
+            {props.getKeyUrl && (
+              <a
+                href={props.getKeyUrl} target="_blank" rel="noopener noreferrer"
+                className="font-medium text-accent underline-offset-4 transition-colors hover:text-accent-hover hover:underline"
+              >
+                Get a free key ↗
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={props.onOpenKeyModal}
+              className="font-medium text-accent underline-offset-4 transition-colors hover:text-accent-hover hover:underline"
+            >
+              Add key
+            </button>
+          </div>
+        )}
         {props.busy && props.progressText && (
           <div role="status" aria-live="polite" className="mt-2.5 font-mono text-[11.5px] text-muted">
             {props.progressText}
@@ -323,7 +350,7 @@ function StepReports(props: {
         <ol className="mt-3 space-y-3 text-[13px] text-muted">
           {[
             <><strong className="text-ink">De-identify &amp; paste</strong> a clinical note and/or pathology report — both optional.</>,
-            <>Your chosen AI provider extracts structured variables browser-direct. No API key is required by default; choose the free cloud service, an on-device model, or use your own OpenAI, Anthropic, or Gemini key.</>,
+            <>Your chosen AI provider extracts structured variables browser-direct. <strong className="text-ink">Groq</strong> is the fast, free default — paste a one-time free key (no credit card, no popups). Or pick Puter for zero-setup, an on-device model, or your own OpenAI, Anthropic, or Gemini key.</>,
             <><strong className="text-ink">Review &amp; complete</strong> the structured form; findings that are pending or not documented are left for you to confirm — never assumed negative.</>,
             <>Get an independent <strong className="text-ink">WHO 2016/2022 assessment</strong> of PV, ET, and overt MF — confirmed, suspicious, or not — plus <strong className="text-ink">prognostic scoring</strong> once a diagnosis is confirmed, each traced to its source.</>,
           ].map((t, i) => (

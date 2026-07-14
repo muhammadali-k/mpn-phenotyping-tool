@@ -145,7 +145,7 @@ export interface Prognosis {
   diseaseConfirmed: DiseaseCode | null
 }
 
-export type ProviderKey = 'puter' | 'webllm' | 'openai' | 'anthropic' | 'gemini'
+export type ProviderKey = 'groq' | 'puter' | 'webllm' | 'openai' | 'anthropic' | 'gemini'
 export interface Provider {
   key: ProviderKey
   label: string
@@ -157,6 +157,7 @@ export interface Provider {
   defaultModel: string
   keyless?: boolean
   onDevice?: boolean
+  getKeyUrl?: string
 }
 
 export interface LLMConfig { provider: ProviderKey; key: string; model: string }
@@ -228,6 +229,13 @@ export const DISEASE_NAME: Record<DiseaseCode, string> = {
 }
 
 export const PROVIDERS: Record<ProviderKey, Provider> = {
+  groq: {
+    key: 'groq', label: 'Groq — free, fast', accent: '#f55036',
+    keyPlaceholder: 'gsk_...', keyHelp: 'Create a free key at console.groq.com/keys — no credit card',
+    keyPattern: /^gsk_/, getKeyUrl: 'https://console.groq.com/keys',
+    models: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+    defaultModel: 'openai/gpt-oss-120b',
+  },
   puter: {
     key: 'puter', label: 'Puter.js — free, no key', accent: '#6851ff',
     keyPlaceholder: '', keyHelp: '', keyPattern: /.*/,
@@ -243,20 +251,23 @@ export const PROVIDERS: Record<ProviderKey, Provider> = {
   openai: {
     key: 'openai', label: 'OpenAI', accent: '#10a37f',
     keyPlaceholder: 'sk-...', keyHelp: 'Create a key at platform.openai.com/api-keys',
-    keyPattern: /^sk-/, models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'], defaultModel: 'gpt-4o',
+    keyPattern: /^sk-/, getKeyUrl: 'https://platform.openai.com/api-keys',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'], defaultModel: 'gpt-4o',
   },
   anthropic: {
     key: 'anthropic', label: 'Anthropic (Claude)', accent: '#C15F3C',
     keyPlaceholder: 'sk-ant-...', keyHelp: 'Create a key at console.anthropic.com/settings/keys',
-    keyPattern: /^sk-ant-/, models: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5'], defaultModel: 'claude-sonnet-4-5',
+    keyPattern: /^sk-ant-/, getKeyUrl: 'https://console.anthropic.com/settings/keys',
+    models: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5'], defaultModel: 'claude-sonnet-4-5',
   },
   gemini: {
     key: 'gemini', label: 'Google (Gemini)', accent: '#1a73e8',
     keyPlaceholder: 'AIza...', keyHelp: 'Create a key at aistudio.google.com/app/apikey',
-    keyPattern: /^AIza/, models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'], defaultModel: 'gemini-2.5-flash',
+    keyPattern: /^AIza/, getKeyUrl: 'https://aistudio.google.com/app/apikey',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'], defaultModel: 'gemini-2.5-flash',
   },
 }
-export const PROVIDER_ORDER: ProviderKey[] = ['puter', 'webllm', 'openai', 'anthropic', 'gemini']
+export const PROVIDER_ORDER: ProviderKey[] = ['groq', 'puter', 'webllm', 'openai', 'anthropic', 'gemini']
 
 export function providerIsKeyless(provider: ProviderKey): boolean {
   return Boolean(PROVIDERS[provider].keyless)
@@ -1476,6 +1487,29 @@ export async function callLLM(
     const parsed = extractJSON(partText)
     if (parsed) return { raw: parsed, provider: 'gemini', model: cfg.model }
     throw new Error('Gemini returned unparseable output' + (cand && cand.finishReason ? ' (finishReason: ' + cand.finishReason + ')' : '') + '.')
+  }
+
+  if (cfg.provider === 'groq') {
+    // Groq is OpenAI-compatible; mirror the OpenAI branch (plain JSON, no tool-calling).
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + cfg.key },
+      body: JSON.stringify({
+        model: cfg.model,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: prompt.system },
+          { role: 'user', content: prompt.user },
+        ],
+      }),
+    })
+    if (!res.ok) throw new Error(friendlyError('groq', res.status, await res.text()))
+    const data = await res.json()
+    const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
+    const parsed = extractJSON(content)
+    if (parsed) return { raw: parsed, provider: 'groq', model: cfg.model }
+    throw new Error('Groq returned unparseable output.')
   }
 
   // OpenAI

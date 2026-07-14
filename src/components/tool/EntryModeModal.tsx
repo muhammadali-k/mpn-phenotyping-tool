@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Keyboard, Sparkles } from 'lucide-react'
 import {
   PROVIDERS,
+  providerIsKeyless,
   providerIsOnDevice,
   type ProviderKey,
 } from '@/lib/engine'
@@ -16,8 +17,10 @@ export interface EntryModeModalProps {
   onOpenChange: (open: boolean) => void
   provider: ProviderKey
   model: string
+  hasKey: boolean
   onChoose: (mode: EntryMode) => void
   onOpenProviderSettings: () => void
+  onUsePuter: () => void
 }
 
 export function EntryModeModal({
@@ -25,13 +28,18 @@ export function EntryModeModal({
   onOpenChange,
   provider,
   model,
+  hasKey,
   onChoose,
   onOpenProviderSettings,
+  onUsePuter,
 }: EntryModeModalProps) {
   const [mode, setMode] = useState<EntryMode>('llm')
   const [acknowledged, setAcknowledged] = useState(false)
   const onDevice = providerIsOnDevice(provider)
+  const keyless = providerIsKeyless(provider)
   const providerInfo = PROVIDERS[provider]
+  const providerName = providerInfo.label.split(' — ')[0].split(' (')[0]
+  const needsKey = mode === 'llm' && !keyless && !hasKey
   const needsAcknowledgment = mode === 'llm' && !onDevice
   const canContinue = !needsAcknowledgment || acknowledged
 
@@ -100,6 +108,36 @@ export function EntryModeModal({
       {mode === 'llm' && onDevice && (
         <div className="mt-4 rounded-[8px] border border-line bg-surface2 px-4 py-3 text-[13px] text-muted">
           <strong className="text-ink">Runs entirely on your device</strong> — nothing is sent to any server.
+        </div>
+      )}
+
+      {needsKey && (
+        <div className="mt-4 rounded-[8px] border border-line bg-surface2 px-4 py-3 text-[13px] text-muted">
+          <strong className="text-ink">{providerName}</strong> is free and fast but needs a one-time free key (no credit card).
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            {providerInfo.getKeyUrl && (
+              <a
+                href={providerInfo.getKeyUrl} target="_blank" rel="noopener noreferrer"
+                className="font-medium text-accent underline-offset-4 transition-colors hover:text-accent-hover hover:underline"
+              >
+                Get a free key ↗
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={onOpenProviderSettings}
+              className="font-medium text-accent underline-offset-4 transition-colors hover:text-accent-hover hover:underline"
+            >
+              Add key
+            </button>
+            <button
+              type="button"
+              onClick={onUsePuter}
+              className="underline-offset-4 transition-colors hover:text-ink hover:underline"
+            >
+              or use Puter — no setup (slower)
+            </button>
+          </div>
         </div>
       )}
 

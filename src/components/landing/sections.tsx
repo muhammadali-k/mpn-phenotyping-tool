@@ -98,7 +98,7 @@ export function StatBand() {
 export function HowItWorks() {
   const steps: { n: string; title: string; body: string }[] = [
     { n: '01', title: 'De-identify & paste', body: 'Paste a clinical note and/or pathology report. An in-browser scrubber flags likely identifiers — names, MRNs, dates, contact details — and a required attestation gates the call until you confirm the text is de-identified.' },
-    { n: '02', title: 'Extract & review', body: 'No API key is required by default: choose the free shared AI service or a fully on-device model, or use the advanced option to bring your own OpenAI, Anthropic, or Gemini key. Your chosen model extracts structured variables, each tagged by source and status; findings that are pending or not documented are left for you to review, never assumed negative.' },
+    { n: '02', title: 'Extract & review', body: 'Groq is the fast, free default — paste a one-time free key (no credit card, no popups). Prefer zero setup? Use Puter (keyless, slower) or a fully on-device model, or bring your own OpenAI, Anthropic, or Gemini key. Your chosen model extracts structured variables, each tagged by source and status; findings that are pending or not documented are left for you to review, never assumed negative.' },
     { n: '03', title: 'Assess & stratify', body: 'The tool resolves source conflicts (structured › pathology › note) and applies WHO 2016/2022 criteria independently to PV, ET, and overt MF — reporting each as confirmed, suspicious, or not. A prognostic model is applied only once a diagnosis is confirmed, and every result is traced to the criterion or study behind it.' },
   ]
   return (
@@ -199,7 +199,7 @@ export function RiskShowcase() {
 export function Privacy() {
   const flow: { icon: React.ReactNode; label: string; sub: string }[] = [
     { icon: <ScanLine size={18} />, label: 'De-identified note', sub: 'scrubbed in your browser' },
-    { icon: <KeyRound size={18} />, label: 'AI extraction', sub: 'browser-direct — no key required by default' },
+    { icon: <KeyRound size={18} />, label: 'AI extraction', sub: 'browser-direct — free key, no popups' },
     { icon: <Trash2 size={18} />, label: 'Discarded', sub: 'nothing persisted or logged' },
   ]
   return (
@@ -215,7 +215,7 @@ export function Privacy() {
               </Reveal>
               <Reveal delay={0.1}>
                 <p className="mt-5 max-w-[52ch] text-[15px] leading-relaxed text-muted">
-                  There is no backend. No API key is required by default: choose Puter.js, a free shared cloud AI service, or WebLLM for fully on-device extraction. As an advanced option, you can bring your own OpenAI, Anthropic, or Gemini key. Cloud extraction calls go browser-direct from your device to the chosen provider; with WebLLM, the text never leaves your browser. We never see your notes, keys, or results, and de-identification happens locally before any cloud call.
+                  There is no backend. Groq is the fast, free default — a one-time free key (no credit card, no popups). Prefer zero setup? Puter.js is a keyless, free shared cloud service, and WebLLM runs fully on-device. As an advanced option, you can bring your own OpenAI, Anthropic, or Gemini key. Cloud extraction calls go browser-direct from your device to the chosen provider; with WebLLM, the text never leaves your browser. We never see your notes, keys, or results, and de-identification happens locally before any cloud call.
                 </p>
               </Reveal>
               <Reveal delay={0.14}>

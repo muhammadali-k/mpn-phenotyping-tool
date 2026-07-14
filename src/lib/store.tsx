@@ -40,7 +40,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const initial = loadKeys()
     const withKey = PROVIDER_ORDER.find((p) => initial[p]?.key)
     if (withKey) return { provider: withKey, key: initial[withKey].key, model: initial[withKey].model || PROVIDERS[withKey].defaultModel }
-    return { provider: 'puter', key: '', model: PROVIDERS.puter.defaultModel }
+    return { provider: 'groq', key: '', model: PROVIDERS.groq.defaultModel }
   })
 
   const saveKey = useCallback((provider: ProviderKey, key: string, model: string, remember: boolean) => {

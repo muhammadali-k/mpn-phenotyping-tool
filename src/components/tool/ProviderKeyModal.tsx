@@ -101,7 +101,16 @@ export function ProviderKeyModal() {
         <label className="mb-4 block">
           <span className="mb-1.5 flex items-baseline gap-2">
             <span className="text-[12.5px] font-medium text-muted">API key</span>
-            <span className="font-mono text-[10.5px] text-faint">{provider.keyHelp}</span>
+            {provider.getKeyUrl ? (
+              <a
+                href={provider.getKeyUrl} target="_blank" rel="noopener noreferrer"
+                className="font-mono text-[10.5px] text-accent underline-offset-2 transition-colors hover:text-accent-hover hover:underline"
+              >
+                {provider.keyHelp || 'Get a free key'} ↗
+              </a>
+            ) : (
+              <span className="font-mono text-[10.5px] text-faint">{provider.keyHelp}</span>
+            )}
           </span>
           <input
             type="password" autoComplete="off" spellCheck={false}

@@ -4,10 +4,12 @@ A **fully client-side** web app that extracts structured variables from de-ident
 clinical notes and pathology reports and assesses three myeloproliferative neoplasms —
 **polycythemia vera (PV)**, **essential thrombocythemia (ET)**, and **overt myelofibrosis
 (overt MF)** — against **WHO 2016/2022** criteria, then applies a prognostic model once a
-diagnosis is confirmed. **No API key is required by default:** use **Puter.js** as a free,
-shared cloud AI service, or choose **WebLLM** for fully on-device extraction. As an advanced
-option, bring your own **OpenAI / Anthropic / Google** API key. Cloud calls go browser-direct,
-on-device extraction keeps text in the browser, and the app has no backend or data store.
+diagnosis is confirmed. **Groq is the fast, free default** — paste a one-time free key
+(from [console.groq.com/keys](https://console.groq.com/keys); no credit card, no popups).
+Prefer zero setup? **Puter.js** is a keyless, free shared cloud service (slower). **WebLLM**
+runs fully on-device, and you can bring your own **OpenAI / Anthropic / Google** API key.
+Cloud calls go browser-direct, on-device extraction keeps text in the browser, and the app
+has no backend or data store.
 
 Each disease is assessed **independently** and reported as one of seven outcomes:
 Confirmed PV / ET / overt MF; Suspicious for PV / ET / overt MF (diagnosis not confirmed);
@@ -90,8 +92,10 @@ model calls are browser-direct, there are no server-side secrets.
 
 - **No backend.** The app is static files; cloud extraction calls go browser-direct from
   the user's device to the chosen provider, with nothing proxied through or stored by this app.
-- **No-key default.** Puter.js provides a free, shared cloud AI service without requiring
-  the user to supply an API key.
+- **Fast, free default.** Groq performs the extraction with a one-time free key (from
+  `console.groq.com/keys`, no credit card), browser-direct and with no runtime popups.
+- **Zero-setup keyless option.** Puter.js provides a free, shared cloud AI service without
+  requiring the user to supply an API key (slower).
 - **Fully on-device option.** WebLLM runs extraction locally, so note and report text does
   not leave the browser.
 - **Advanced bring-your-own-key option.** OpenAI, Anthropic, and Google Gemini remain
