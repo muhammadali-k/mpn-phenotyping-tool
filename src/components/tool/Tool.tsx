@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, Copy, Download, FlaskConical, Loader2, Printer, Sparkles } from 'lucide-react'
 import {
   callLLM, diagnose, EXAMPLES, FIELDS, FIELD_BY_KEY, GROUP_LABEL, GROUP_ORDER,
-  normalizeExtraction, prognose, type ClassifyResult, type Extraction, type SourceTag, type VarValue, type Variables,
+  normalizeExtraction, prognose, PROVIDERS, providerIsKeyless, providerIsOnDevice,
+  type ClassifyResult, type Extraction, type SourceTag, type VarValue, type Variables,
 } from '@/lib/engine'
 import { useApp } from '@/lib/store'
 import { Button, Eyebrow, StepMarker } from '@/components/ui/primitives'
 import { VarField } from './fields'
 import { DeidPanel } from './DeidPanel'
+import { EntryModeModal, type EntryMode } from './EntryModeModal'
 import { Results } from './Results'
 import { cx, fmtValue } from '@/lib/util'
 
@@ -35,6 +37,10 @@ export function Tool() {
   const [result, setResult] = useState<ClassifyResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [progressText, setProgressText] = useState('')
+  const [entryMode, setEntryMode] = useState<EntryMode | null>(null)
+  const [llmAcknowledged, setLlmAcknowledged] = useState(false)
+  const [entryModalOpen, setEntryModalOpen] = useState(false)
   const [toast, setToast] = useState('')
   const toastTimer = useRef<number | undefined>(undefined)
 
@@ -49,13 +55,20 @@ export function Tool() {
     if (firstRender.current) { firstRender.current = false; return }
     stepRef.current?.focus()
   }, [step])
+  useEffect(() => {
+    if (step === 1 && entryMode === null) setEntryModalOpen(true)
+  }, [entryMode, step])
 
   const hasText = (note + path).trim().length > 0
-  const extractReady = attested && hasText && !!config.key
+  const keyless = providerIsKeyless(config.provider)
+  const onDevice = providerIsOnDevice(config.provider)
+  const hasCredential = keyless || !!config.key
+  const ackOk = onDevice || llmAcknowledged
+  const extractReady = attested && hasText && hasCredential && ackOk
 
   function reset() {
     setNote(''); setPath(''); setAttested(false); setOnFile({}); setExtracted(EMPTY_EXTRACT)
-    setLastExtract(null); setForm({}); setResult(null); setError('')
+    setLastExtract(null); setForm({}); setResult(null); setError(''); setProgressText('')
   }
 
   function loadExample(k: keyof typeof EXAMPLES) {
@@ -80,10 +93,17 @@ export function Tool() {
   }
 
   async function runExtraction() {
-    setBusy(true); setError('')
+    if (!ackOk) {
+      setError('Confirm the data-sharing acknowledgment before starting cloud AI extraction.')
+      return
+    }
+    setBusy(true); setError(''); setProgressText('Starting AI extraction…')
     try {
       const inputs = { ...onFile, clinical_note: note, pathology_report: path }
-      const res = await callLLM(config, inputs)
+      const res = await callLLM(config, inputs, (message, pct) => {
+        const percent = typeof pct === 'number' ? ` ${Math.round(pct * 100)}%` : ''
+        setProgressText(`${message}${percent}`)
+      })
       const ext = normalizeExtraction(res.raw, note + '\n' + path)
       setExtracted(ext)
       setLastExtract({ provider: res.provider, model: res.model })
@@ -94,6 +114,7 @@ export function Tool() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
+      setProgressText('')
     }
   }
 
@@ -101,6 +122,18 @@ export function Tool() {
     setExtracted(EMPTY_EXTRACT)
     initForm(EMPTY_EXTRACT, onFile)
     setStep(2)
+  }
+
+  function chooseEntryMode(mode: EntryMode) {
+    setEntryMode(mode)
+    setEntryModalOpen(false)
+    if (mode === 'manual') {
+      setLlmAcknowledged(false)
+      skipToForm()
+      return
+    }
+    setLlmAcknowledged(!onDevice)
+    setStep(1)
   }
 
   function runDiagnosis() {
@@ -156,8 +189,8 @@ export function Tool() {
           ))}
           <div className="flex-1" />
           <button type="button" onClick={() => setKeyModalOpen(true)} className="inline-flex items-center gap-2 font-mono text-[11.5px] text-muted transition-colors hover:text-ink">
-            <span className={cx('inline-block h-[7px] w-[7px] rounded-full', config.key ? 'bg-success' : 'bg-faint')} aria-hidden />
-            {config.key ? config.provider : 'set up model'}
+            <span className={cx('inline-block h-[7px] w-[7px] rounded-full', hasCredential ? 'bg-success' : 'bg-faint')} aria-hidden />
+            {hasCredential ? PROVIDERS[config.provider].label : 'set up model'}
           </button>
         </nav>
 
@@ -169,8 +202,9 @@ export function Tool() {
               attested={attested} setAttested={setAttested}
               onLoadExample={loadExample} onClear={reset}
               extractReady={extractReady} busy={busy} error={error}
-              hasKey={!!config.key} hasText={hasText}
-              onExtract={runExtraction} onSkip={skipToForm}
+              hasCredential={hasCredential} keyless={keyless} ackOk={ackOk} hasText={hasText}
+              progressText={progressText}
+              onExtract={runExtraction} onChangeEntryMode={() => setEntryModalOpen(true)}
               onApplyRedaction={(n, p) => { setNote(n); setPath(p) }}
             />
           )}
@@ -194,6 +228,14 @@ export function Tool() {
           {toast}
         </div>
       )}
+      <EntryModeModal
+        open={entryModalOpen}
+        onOpenChange={setEntryModalOpen}
+        provider={config.provider}
+        model={config.model}
+        onChoose={chooseEntryMode}
+        onOpenProviderSettings={() => setKeyModalOpen(true)}
+      />
     </div>
   )
 }
@@ -203,8 +245,9 @@ function StepReports(props: {
   note: string; path: string; setNote: (s: string) => void; setPath: (s: string) => void
   attested: boolean; setAttested: (b: boolean) => void
   onLoadExample: (k: keyof typeof EXAMPLES) => void; onClear: () => void
-  extractReady: boolean; busy: boolean; error: string; hasKey: boolean; hasText: boolean
-  onExtract: () => void; onSkip: () => void; onApplyRedaction: (n: string, p: string) => void
+  extractReady: boolean; busy: boolean; error: string; hasCredential: boolean; keyless: boolean; ackOk: boolean; hasText: boolean
+  progressText: string
+  onExtract: () => void; onChangeEntryMode: () => void; onApplyRedaction: (n: string, p: string) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const ta = 'scroll min-h-[130px] w-full resize-y rounded-[6px] border border-line-strong bg-surface2 px-3.5 py-3 text-[14px] leading-[1.6] outline-none transition-colors focus:border-focus focus:bg-surface'
@@ -254,15 +297,20 @@ function StepReports(props: {
           <Button
             onClick={props.onExtract}
             disabled={!props.extractReady || props.busy}
-            title={!props.hasText ? 'Paste a note or report first' : !props.attested ? 'Confirm de-identification first' : !props.hasKey ? 'Add an API key first' : 'Extract structured variables'}
+            title={!props.hasText ? 'Paste a note or report first' : !props.attested ? 'Confirm de-identification first' : !props.ackOk ? 'Confirm the data-sharing acknowledgment first' : !props.hasCredential && !props.keyless ? 'Add an API key first' : 'Extract structured variables'}
           >
             {props.busy ? <Loader2 aria-hidden size={15} className="animate-spin" /> : <Sparkles aria-hidden size={15} />}
             {props.busy ? 'Extracting…' : 'Extract with AI'}
           </Button>
-          <Button variant="outline" onClick={props.onSkip}>Skip — enter data manually</Button>
+          <Button variant="outline" size="sm" onClick={props.onChangeEntryMode}>Change entry mode</Button>
           <div className="flex-1" />
           <Button variant="ghost" size="sm" onClick={props.onClear}>Clear</Button>
         </div>
+        {props.busy && props.progressText && (
+          <div role="status" aria-live="polite" className="mt-2.5 font-mono text-[11.5px] text-muted">
+            {props.progressText}
+          </div>
+        )}
         {props.error && (
           <div role="alert" className="mt-3.5 rounded-[8px] bg-[color-mix(in_srgb,var(--c-danger)_12%,transparent)] px-4 py-3 text-[13px] text-danger">
             {props.error}
@@ -275,7 +323,7 @@ function StepReports(props: {
         <ol className="mt-3 space-y-3 text-[13px] text-muted">
           {[
             <><strong className="text-ink">De-identify &amp; paste</strong> a clinical note and/or pathology report — both optional.</>,
-            <>Your chosen model (<strong className="text-ink">OpenAI</strong>, <strong className="text-ink">Claude</strong>, or <strong className="text-ink">Gemini</strong>) extracts structured variables, called browser-direct with your own key. No server, no storage.</>,
+            <>Your chosen AI provider extracts structured variables browser-direct. No API key is required by default; choose the free cloud service, an on-device model, or use your own OpenAI, Anthropic, or Gemini key.</>,
             <><strong className="text-ink">Review &amp; complete</strong> the structured form; findings that are pending or not documented are left for you to confirm — never assumed negative.</>,
             <>Get an independent <strong className="text-ink">WHO 2016/2022 assessment</strong> of PV, ET, and overt MF — confirmed, suspicious, or not — plus <strong className="text-ink">prognostic scoring</strong> once a diagnosis is confirmed, each traced to its source.</>,
           ].map((t, i) => (
@@ -286,7 +334,7 @@ function StepReports(props: {
           ))}
         </ol>
         <div className="mt-5 rounded-[8px] border border-line bg-surface px-4 py-3 text-[12.5px] text-muted">
-          <span className="text-info">No note?</span> Skip extraction and enter structured data directly — diagnosis works from structured variables alone.
+          <span className="text-info">No note?</span> Choose <strong className="text-ink">Enter data manually</strong> from the entry-mode pop-up — diagnosis works from structured variables alone.
         </div>
       </aside>
     </div>

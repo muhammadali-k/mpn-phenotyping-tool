@@ -145,7 +145,7 @@ export interface Prognosis {
   diseaseConfirmed: DiseaseCode | null
 }
 
-export type ProviderKey = 'openai' | 'anthropic' | 'gemini'
+export type ProviderKey = 'puter' | 'webllm' | 'openai' | 'anthropic' | 'gemini'
 export interface Provider {
   key: ProviderKey
   label: string
@@ -155,6 +155,8 @@ export interface Provider {
   keyPattern: RegExp
   models: string[]
   defaultModel: string
+  keyless?: boolean
+  onDevice?: boolean
 }
 
 export interface LLMConfig { provider: ProviderKey; key: string; model: string }
@@ -226,6 +228,18 @@ export const DISEASE_NAME: Record<DiseaseCode, string> = {
 }
 
 export const PROVIDERS: Record<ProviderKey, Provider> = {
+  puter: {
+    key: 'puter', label: 'Puter.js — free, no key', accent: '#6851ff',
+    keyPlaceholder: '', keyHelp: '', keyPattern: /.*/,
+    models: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o', 'gpt-5-mini', 'claude-sonnet-4-5', 'gemini-2.5-flash'],
+    defaultModel: 'gpt-4.1-mini', keyless: true,
+  },
+  webllm: {
+    key: 'webllm', label: 'On-device (WebLLM)', accent: '#0f766e',
+    keyPlaceholder: '', keyHelp: '', keyPattern: /.*/,
+    models: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC'],
+    defaultModel: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', keyless: true, onDevice: true,
+  },
   openai: {
     key: 'openai', label: 'OpenAI', accent: '#10a37f',
     keyPlaceholder: 'sk-...', keyHelp: 'Create a key at platform.openai.com/api-keys',
@@ -242,7 +256,15 @@ export const PROVIDERS: Record<ProviderKey, Provider> = {
     keyPattern: /^AIza/, models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'], defaultModel: 'gemini-2.5-flash',
   },
 }
-export const PROVIDER_ORDER: ProviderKey[] = ['openai', 'anthropic', 'gemini']
+export const PROVIDER_ORDER: ProviderKey[] = ['puter', 'webllm', 'openai', 'anthropic', 'gemini']
+
+export function providerIsKeyless(provider: ProviderKey): boolean {
+  return Boolean(PROVIDERS[provider].keyless)
+}
+
+export function providerIsOnDevice(provider: ProviderKey): boolean {
+  return Boolean(PROVIDERS[provider].onDevice)
+}
 
 // ---------------------------------------------------------------- helpers
 function num(x: unknown): number | null {
@@ -1192,7 +1214,7 @@ export function anthropicToolSchema() {
   }
 }
 
-function extractJSON(text: string | null | undefined): unknown {
+export function extractJSON(text: string | null | undefined): unknown {
   if (!text) return null
   try { return JSON.parse(text) } catch { /* fall through */ }
   const a = text.indexOf('{'), b = text.lastIndexOf('}')
@@ -1210,8 +1232,204 @@ function friendlyError(provider: ProviderKey, status: number, body: string): str
   return label + ' ' + status + ': ' + snippet
 }
 
-export async function callLLM(cfg: LLMConfig, inputs: PromptInputs): Promise<LLMResult> {
+interface PuterMessage {
+  role: 'system' | 'user'
+  content: string
+}
+
+interface PuterToolCall {
+  function?: { arguments?: string }
+}
+
+interface PuterChatResponse {
+  message?: {
+    content?: string | null
+    tool_calls?: PuterToolCall[]
+  }
+}
+
+interface PuterChatOptions {
+  model?: string
+  tools?: Array<{
+    type: 'function'
+    function: {
+      name: string
+      description: string
+      parameters: Record<string, unknown>
+    }
+  }>
+}
+
+interface PuterSDK {
+  ai: {
+    chat(messages: PuterMessage[], options: PuterChatOptions): Promise<PuterChatResponse>
+  }
+}
+
+let puterSDKPromise: Promise<PuterSDK> | null = null
+
+function getWindowPuter(): PuterSDK | undefined {
+  return (window as Window & { puter?: PuterSDK }).puter
+}
+
+function loadPuterSDK(): Promise<PuterSDK> {
+  const available = getWindowPuter()
+  if (available) return Promise.resolve(available)
+  if (puterSDKPromise) return puterSDKPromise
+
+  puterSDKPromise = new Promise<PuterSDK>((resolve, reject) => {
+    const src = 'https://js.puter.com/v2/'
+    const timeoutMs = 20_000
+    let settled = false
+    let poll: number | undefined
+    let timeout: number | undefined
+
+    let script = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`)
+    const shouldAppendScript = !script
+    if (!script) {
+      script = document.createElement('script')
+      script.src = src
+      script.async = true
+    }
+
+    const finish = (sdk?: PuterSDK, error?: Error) => {
+      if (settled) return
+      settled = true
+      if (poll !== undefined) window.clearInterval(poll)
+      if (timeout !== undefined) window.clearTimeout(timeout)
+      if (sdk) resolve(sdk)
+      else {
+        script.remove()
+        reject(error || new Error('Puter.js could not be loaded. Check your connection or content blocker, then try again.'))
+      }
+    }
+
+    poll = window.setInterval(() => {
+      const sdk = getWindowPuter()
+      if (sdk) finish(sdk)
+    }, 50)
+    timeout = window.setTimeout(() => {
+      finish(undefined, new Error('Puter.js did not finish loading. Check your connection or content blocker, then try again.'))
+    }, timeoutMs)
+
+    script.addEventListener('load', () => {
+      const sdk = getWindowPuter()
+      if (sdk) finish(sdk)
+    }, { once: true })
+    script.addEventListener('error', () => {
+      finish(undefined, new Error('Puter.js could not be loaded. Check your connection or content blocker, then try again.'))
+    }, { once: true })
+    if (shouldAppendScript) document.head.appendChild(script)
+  }).catch((error: unknown) => {
+    puterSDKPromise = null
+    throw error
+  })
+
+  return puterSDKPromise
+}
+
+function puterErrorText(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try { return JSON.stringify(error) } catch { return String(error) }
+}
+
+function puterModelNotFound(error: unknown): boolean {
+  const message = puterErrorText(error)
+  return /model[_\s-]*not[_\s-]*found|unknown model|no such model|unsupported model|invalid model|model.*(?:unavailable|not available|does not exist)|(?:404.*model)|(?:model.*404)/i.test(message)
+}
+
+function puterToolsUnsupported(error: unknown): boolean {
+  const message = puterErrorText(error).replace(/[_-]+/g, ' ')
+  const toolCapability = String.raw`(?:tools?|tool\s+(?:use|calls?|calling)|functions?|function\s+calls?|function\s+calling)`
+  const unsupported = String.raw`(?:unsupported|not\s+supported|does(?:\s+not|n't)\s+support|unavailable|not\s+available|disabled|not\s+enabled|unknown|unrecognized|invalid|not\s+(?:a\s+)?valid|not\s+(?:allowed|permitted)|cannot\s+be\s+used|can't\s+be\s+used|does(?:\s+not|n't)\s+allow)`
+  return new RegExp(`(?:${toolCapability}).{0,120}(?:${unsupported})|(?:${unsupported}).{0,120}(?:${toolCapability})`, 'is').test(message)
+}
+
+function throwFriendlyPuterError(error: unknown): never {
+  const message = puterErrorText(error)
+  if (/sign[\s_-]?in|signin|log[\s_-]?in|auth(?:entication|orization)?|unauthori[sz]ed|(?:popup|window).*(?:cancel|clos|block)|user.*cancel|cancel(?:led|ed)?/i.test(message)) {
+    throw new Error('Puter sign-in was cancelled or failed — try again, or switch to On-device (WebLLM) or your own API key.')
+  }
+  if (error instanceof Error) throw error
+  throw new Error(message || 'Puter.js could not complete the extraction.')
+}
+
+export async function callLLM(
+  cfg: LLMConfig,
+  inputs: PromptInputs,
+  onProgress?: (msg: string, pct?: number) => void,
+): Promise<LLMResult> {
   const prompt = buildPrompt(inputs)
+
+  if (cfg.provider === 'puter') {
+    const puter = await loadPuterSDK()
+    const messages: PuterMessage[] = [
+      { role: 'system', content: prompt.system },
+      { role: 'user', content: prompt.user },
+    ]
+    const schema = anthropicToolSchema()
+    const tools: PuterChatOptions['tools'] = [{
+      type: 'function',
+      function: {
+        name: 'record_mpn_variables',
+        description: schema.description,
+        parameters: schema.input_schema,
+      },
+    }]
+
+    const chat = (model?: string, withTools = true) => puter.ai.chat(messages, {
+      ...(model ? { model } : {}),
+      ...(withTools ? { tools } : {}),
+    })
+    const chatWithToolFallback = async (model?: string) => {
+      try {
+        return await chat(model)
+      } catch (error: unknown) {
+        if (!puterToolsUnsupported(error)) throw error
+        return chat(model, false)
+      }
+    }
+    let response: PuterChatResponse
+    try {
+      response = await chatWithToolFallback(cfg.model)
+    } catch (error: unknown) {
+      if (!puterModelNotFound(error)) throwFriendlyPuterError(error)
+      try {
+        response = await chatWithToolFallback('gpt-4.1')
+      } catch (fallbackError: unknown) {
+        if (!puterModelNotFound(fallbackError)) throwFriendlyPuterError(fallbackError)
+        try {
+          response = await chatWithToolFallback()
+        } catch (defaultError: unknown) {
+          throwFriendlyPuterError(defaultError)
+        }
+      }
+    }
+
+    const argumentsJSON = response.message?.tool_calls?.[0]?.function?.arguments
+    if (argumentsJSON) {
+      try {
+        return { raw: JSON.parse(argumentsJSON), provider: 'puter', model: cfg.model }
+      } catch { /* fall back to JSON content below */ }
+    }
+    const parsed = extractJSON(response.message?.content ?? String(response))
+    if (parsed) return { raw: parsed, provider: 'puter', model: cfg.model }
+    throw new Error('Puter.js returned no structured output.')
+  }
+
+  if (cfg.provider === 'webllm') {
+    if (typeof navigator === 'undefined' || !('gpu' in navigator)) {
+      throw new Error('This browser has no WebGPU support. Use Chrome or Edge, or choose Puter.js / your own API key.')
+    }
+    const messages = [
+      { role: 'system' as const, content: prompt.system },
+      { role: 'user' as const, content: prompt.user },
+    ]
+    const { runWebLLM } = await import('./webllm')
+    const raw = await runWebLLM(cfg.model, messages, onProgress)
+    return { raw, provider: 'webllm', model: cfg.model }
+  }
 
   if (cfg.provider === 'anthropic') {
     const tool = anthropicToolSchema()
