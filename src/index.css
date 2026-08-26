@@ -2,7 +2,7 @@
 
 /* =========================================================================
    MPN Phenotyping — "Clinical" design system (blood-red)
-   Clean health-tech surfaces: soft warm-neutral ground, white cards, hairline
+   Professional health-tech surfaces: soft warm-neutral ground, white cards, hairline
    borders, a single blood-red accent, Plus Jakarta Sans display + Inter body.
    Semantic status (success / warn / danger) stays separate from the accent.
    ========================================================================= */
@@ -155,7 +155,7 @@
 
 /* ---------------------------------------------------------------- signature (retired)
    The old "blueprint grid" + corner plus-marks read as over-designed; they are
-   intentionally neutralized here so the shared markup renders clean surfaces. */
+   intentionally neutralized here so the shared markup renders uncluttered surfaces. */
 .blueprint { display: none; }
 .corners > .cm { display: none; }
 
@@ -166,7 +166,7 @@
 }
 :root[data-theme="dark"] .bloom { opacity: 0.28; }
 
-/* app-frame: the tool container reads as one clean elevated card */
+/* app-frame: the tool container reads as one elevated card */
 .app-frame {
   box-shadow: var(--frame-shadow);
   border: 1px solid var(--c-line);

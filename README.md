@@ -23,7 +23,7 @@ model applicable to that diagnosis, and reports “category not established” r
 missing required variables. The diagnosis + prognosis logic adapts the
 [mpn-phenotyping-pipeline](https://github.com/muhammadali-k/mpn-phenotyping-pipeline).
 
-Design system: **"Clinical"** — a clean, modern health-tech look: a soft warm-neutral
+Design system: **"Clinical"**, a professional, modern health-tech look: a soft warm-neutral
 ground, white cards with hairline borders and gentle shadows, a single blood-red accent
 (with a blood-drop mark), and Plus Jakarta Sans display paired with Inter body. Semantic
 status (success / warn / danger) stays separate from the accent, and provenance is rendered
