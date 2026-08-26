@@ -8,8 +8,8 @@ const REPO = 'https://github.com/muhammadali-k/mpn-phenotyping-pipeline'
 const container = 'mx-auto max-w-[1120px] px-6'
 
 const ROLE_SUBHEAD: Record<Role, string> = {
-  hematologist: 'Assess a de-identified note and marrow report against WHO 2016/2022 criteria for PV, ET, and overt MF — each reported as confirmed, suspicious, or not — with prognostic scoring once a diagnosis is confirmed.',
-  pathologist: 'Extract marrow morphology, fibrosis grade, and driver mutations into structured variables, then see which criteria are met, not met, or still unavailable — every value traced to its source.',
+  hematologist: 'Assess a de-identified note and marrow report against WHO 2016/2022 criteria for PV, ET, and overt MF (each reported as confirmed, suspicious, or not) with prognostic scoring once a diagnosis is confirmed.',
+  pathologist: 'Extract marrow morphology, fibrosis grade, and driver mutations into structured variables, then see which criteria are met, not met, or still unavailable, every value traced to its source.',
   researcher: 'Phenotype PV, ET, and overt MF from unstructured notes: structured extraction, WHO criteria applied independently to each disease, and prognostic models applied only after a diagnosis is confirmed. Reproducible and fully in-browser.',
 }
 
@@ -30,7 +30,7 @@ export function Hero() {
           </div>
         </Reveal>
         <Reveal delay={0.05}>
-          <h1 className="mt-5 max-w-[18ch] font-display text-[44px] font-normal leading-[1.03] tracking-[-0.022em] sm:text-[62px]">
+          <h1 className="mt-5 max-w-[18ch] font-display text-[44px] font-semibold leading-[1.03] tracking-[-0.022em] sm:text-[62px]">
             Diagnosis and prognosis for PV, ET, and overt myelofibrosis.
           </h1>
         </Reveal>
@@ -74,10 +74,10 @@ export function Hero() {
 /* ============================================================ Stat band */
 export function StatBand() {
   const stats: { figure: string; label: string }[] = [
-    { figure: '3', label: 'diseases in scope — PV · ET · overt MF' },
+    { figure: '3', label: 'diseases in scope: PV · ET · overt MF' },
     { figure: '2022', label: 'WHO criteria applied independently to each disease' },
-    { figure: '5', label: 'prognostic models — applied only after a diagnosis is confirmed' },
-    { figure: '0', label: 'notes stored — everything stays in your browser' },
+    { figure: '5', label: 'prognostic models, applied only after a diagnosis is confirmed' },
+    { figure: '0', label: 'notes stored, everything stays in your browser' },
   ]
   return (
     <section className="border-b border-line">
@@ -97,9 +97,9 @@ export function StatBand() {
 /* ============================================================ How it works */
 export function HowItWorks() {
   const steps: { n: string; title: string; body: string }[] = [
-    { n: '01', title: 'De-identify & paste', body: 'Paste a clinical note and/or pathology report. An in-browser scrubber flags likely identifiers — names, MRNs, dates, contact details — and a required attestation gates the call until you confirm the text is de-identified.' },
-    { n: '02', title: 'Extract & review', body: 'Groq is the fast, free default — paste a one-time free key (no credit card, no popups). Prefer zero setup? Use Puter (keyless, slower) or a fully on-device model, or bring your own OpenAI, Anthropic, or Gemini key. Your chosen model extracts structured variables, each tagged by source and status; findings that are pending or not documented are left for you to review, never assumed negative.' },
-    { n: '03', title: 'Assess & stratify', body: 'The tool resolves source conflicts (structured › pathology › note) and applies WHO 2016/2022 criteria independently to PV, ET, and overt MF — reporting each as confirmed, suspicious, or not. A prognostic model is applied only once a diagnosis is confirmed, and every result is traced to the criterion or study behind it.' },
+    { n: '01', title: 'De-identify & paste', body: 'Paste a clinical note and/or pathology report. An in-browser scrubber flags likely identifiers (names, MRNs, dates, contact details) and a required attestation gates the call until you confirm the text is de-identified.' },
+    { n: '02', title: 'Extract & review', body: 'Groq is the fast, free default: paste a one-time free key (no credit card, no popups). Prefer zero setup? Use Puter (keyless, slower) or a fully on-device model, or bring your own OpenAI, Anthropic, or Gemini key. Your chosen model extracts structured variables, each tagged by source and status; findings that are pending or not documented are left for you to review, never assumed negative.' },
+    { n: '03', title: 'Assess & stratify', body: 'The tool resolves source conflicts (structured › pathology › note) and applies WHO 2016/2022 criteria independently to PV, ET, and overt MF, reporting each as confirmed, suspicious, or not. A prognostic model is applied only once a diagnosis is confirmed, and every result is traced to the criterion or study behind it.' },
   ]
   return (
     <section id="how" className="scroll-mt-16 border-b border-line">
@@ -112,7 +112,7 @@ export function HowItWorks() {
             </Reveal>
             <Reveal delay={0.1}>
               <p className="mt-5 max-w-[46ch] text-[15px] leading-relaxed text-muted">
-                Every extracted variable carries its source, and every criterion is shown as met, not met, or unavailable — so a confirmed, suspicious, or not-met verdict can always be checked against the evidence behind it.
+                Every extracted variable carries its source, and every criterion is shown as met, not met, or unavailable, so a confirmed, suspicious, or not-met verdict can always be checked against the evidence behind it.
               </p>
             </Reveal>
           </div>
@@ -199,7 +199,7 @@ export function RiskShowcase() {
 export function Privacy() {
   const flow: { icon: React.ReactNode; label: string; sub: string }[] = [
     { icon: <ScanLine size={18} />, label: 'De-identified note', sub: 'scrubbed in your browser' },
-    { icon: <KeyRound size={18} />, label: 'AI extraction', sub: 'browser-direct — free key, no popups' },
+    { icon: <KeyRound size={18} />, label: 'AI extraction', sub: 'browser-direct, free key, no popups' },
     { icon: <Trash2 size={18} />, label: 'Discarded', sub: 'nothing persisted or logged' },
   ]
   return (
@@ -215,12 +215,12 @@ export function Privacy() {
               </Reveal>
               <Reveal delay={0.1}>
                 <p className="mt-5 max-w-[52ch] text-[15px] leading-relaxed text-muted">
-                  There is no backend. Groq is the fast, free default — a one-time free key (no credit card, no popups). Prefer zero setup? Puter.js is a keyless, free shared cloud service, and WebLLM runs fully on-device. As an advanced option, you can bring your own OpenAI, Anthropic, or Gemini key. Cloud extraction calls go browser-direct from your device to the chosen provider; with WebLLM, the text never leaves your browser. We never see your notes, keys, or results, and de-identification happens locally before any cloud call.
+                  There is no backend. Groq is the fast, free default: a one-time free key (no credit card, no popups). Prefer zero setup? Puter.js is a keyless, free shared cloud service, and WebLLM runs fully on-device. As an advanced option, you can bring your own OpenAI, Anthropic, or Gemini key. Cloud extraction calls go browser-direct from your device to the chosen provider; with WebLLM, the text never leaves your browser. We never see your notes, keys, or results, and de-identification happens locally before any cloud call.
                 </p>
               </Reveal>
               <Reveal delay={0.14}>
                 <p className="mt-4 max-w-[52ch] text-[13px] leading-relaxed text-faint">
-                  General-purpose models are not covered by a HIPAA BAA — use de-identified or synthetic text only. This tool is investigational and not a medical device.
+                  General-purpose models are not covered by a HIPAA BAA; use de-identified or synthetic text only. This tool is investigational and not a medical device.
                 </p>
               </Reveal>
             </div>
@@ -258,7 +258,7 @@ export function ClosingCTA() {
       <div className={cx(container, 'py-24 text-center lg:py-32')}>
         <Reveal>
           <h2 className="mx-auto max-w-[24ch] font-display text-[36px] leading-[1.08] tracking-[-0.02em] sm:text-[44px]">
-            Assess a case against WHO criteria — diagnosis first, prognosis once confirmed.
+            Assess a case against WHO criteria: diagnosis first, prognosis once confirmed.
           </h2>
         </Reveal>
         <Reveal delay={0.08}>
@@ -277,7 +277,12 @@ export function Footer() {
     <footer className="border-t border-line">
       <div className={cx(container, 'flex flex-col gap-6 py-12 sm:flex-row sm:items-start sm:justify-between')}>
         <div className="max-w-[42ch]">
-          <div className="font-mono text-[12px] font-medium">mpn<span className="text-faint">/</span>phenotyping</div>
+          <div className="flex items-center gap-2">
+            <span className="grid h-7 w-6 shrink-0 place-items-center text-accent">
+              <svg aria-hidden viewBox="0 0 24 26" width="18" height="20" fill="none"><path fill="currentColor" d="M12 1.4C12 1.4 4.6 10.6 4.6 17a7.4 7.4 0 0 0 14.8 0C19.4 10.6 12 1.4 12 1.4Z" /><ellipse cx="9.5" cy="17.4" rx="1.7" ry="2.5" fill="#fff" opacity="0.4" /></svg>
+            </span>
+            <span className="font-display text-[14px] font-bold tracking-[-0.01em]">MPN Phenotyping</span>
+          </div>
           <p className="mt-3 text-[12.5px] leading-relaxed text-faint">
             An investigational decision-support tool for polycythemia vera, essential thrombocythemia, and overt myelofibrosis. Applies published WHO criteria and prognostic models, fully in your browser. Not for clinical use.
           </p>

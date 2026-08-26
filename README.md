@@ -23,10 +23,12 @@ model applicable to that diagnosis, and reports “category not established” r
 missing required variables. The diagnosis + prognosis logic adapts the
 [mpn-phenotyping-pipeline](https://github.com/muhammadali-k/mpn-phenotyping-pipeline).
 
-Design system: **"Lancet · The Evidence Grid"** — hairline borders as structure,
-editorial serif display (Newsreader), tabular mono numerals (IBM Plex Mono), a single
-teal accent quarantined to actionable affordances, and provenance rendered as the visible
-"wiring" of the interface (numbered source chips → source rail).
+Design system: **"Clinical"** — a clean, modern health-tech look: a soft warm-neutral
+ground, white cards with hairline borders and gentle shadows, a single blood-red accent
+(with a blood-drop mark), and Plus Jakarta Sans display paired with Inter body. Semantic
+status (success / warn / danger) stays separate from the accent, and provenance is rendered
+as the visible "wiring" of the interface (numbered source chips leading to a source rail).
+Light and a designed dark scale are both included.
 
 > **Not a medical device.** Research and decision-support only. Every output must be
 > confirmed by a qualified hematologist. Use **de-identified** or synthetic text only —

@@ -80,7 +80,7 @@ export function VarField({ field, value, source, onChange }: FieldProps) {
             value={value == null ? '' : String(value)}
             onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
           >
-            <option value="">—</option>
+            <option value="">–</option>
             {(field.options || []).map((o) => (
               <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>
             ))}
@@ -93,7 +93,7 @@ export function VarField({ field, value, source, onChange }: FieldProps) {
 }
 
 function TriState({ value, onChange, labelId }: { value: boolean | undefined; onChange: (v: VarValue | undefined) => void; labelId: string }) {
-  const opts: [string, boolean | undefined][] = [['yes', true], ['no', false], ['—', undefined]]
+  const opts: [string, boolean | undefined][] = [['yes', true], ['no', false], ['–', undefined]]
   return (
     <div className="flex h-10 w-full overflow-hidden rounded-[6px] border border-line-strong">
       {opts.map(([lbl, val], i) => {

@@ -17,11 +17,11 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-[color-mix(in_srgb,var(--c-bg)_82%,transparent)] backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-4 px-6">
-        <a href="#top" className="flex min-w-0 shrink items-center gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[8px] bg-accent text-on-accent">
-            <svg aria-hidden viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" /></svg>
+        <a href="#top" className="flex min-w-0 shrink items-center gap-2">
+          <span className="grid h-8 w-7 shrink-0 place-items-center text-accent">
+            <svg aria-hidden viewBox="0 0 24 26" width="20" height="22" fill="none"><path fill="currentColor" d="M12 1.4C12 1.4 4.6 10.6 4.6 17a7.4 7.4 0 0 0 14.8 0C19.4 10.6 12 1.4 12 1.4Z" /><ellipse cx="9.5" cy="17.4" rx="1.7" ry="2.5" fill="#fff" opacity="0.4" /></svg>
           </span>
-          <span className="hidden truncate font-mono text-[13px] font-medium tracking-tight min-[380px]:inline">mpn<span className="text-faint">/</span>phenotyping</span>
+          <span className="hidden truncate font-display text-[15px] font-bold tracking-[-0.01em] min-[380px]:inline">MPN Phenotyping</span>
         </a>
 
         <div className="flex-1" />
@@ -48,7 +48,7 @@ export function Nav() {
         </a>
         <button
           type="button" onClick={scrollToTool}
-          className={cx('ml-1 hidden rounded-[8px] px-3.5 py-2 text-[13.5px] font-medium text-accent transition-colors hover:bg-accent-soft sm:block')}
+          className={cx('ml-1 hidden rounded-[9px] bg-accent px-3.5 py-2 text-[13.5px] font-semibold text-on-accent shadow-[var(--shadow-sm)] transition-colors hover:bg-accent-hover sm:block')}
         >
           Open the tool →
         </button>

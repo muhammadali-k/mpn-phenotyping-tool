@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
 /* =========================================================================
-   MPN Phenotyping — "Lancet · The Evidence Grid" design system
-   Hairline borders as structure · editorial serif display · mono tabular
-   numerals · single teal accent quarantined to actionable affordances.
+   MPN Phenotyping — "Clinical" design system (blood-red)
+   Clean health-tech surfaces: soft warm-neutral ground, white cards, hairline
+   borders, a single blood-red accent, Plus Jakarta Sans display + Inter body.
+   Semantic status (success / warn / danger) stays separate from the accent.
    ========================================================================= */
 
 @theme {
-  --font-display: "Newsreader", ui-serif, Georgia, "Times New Roman", serif;
-  --font-sans: "Inter", "Inter var", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   /* semantic color tokens → runtime CSS vars (light/dark swap below) */
   --color-bg: var(--c-bg);
@@ -33,70 +34,70 @@
   --color-danger: var(--c-danger);
   --color-info: var(--c-info);
 
-  --radius-input: 6px;
-  --radius-btn: 8px;
-  --radius-card: 10px;
-  --radius-frame: 14px;
+  --radius-input: 8px;
+  --radius-btn: 10px;
+  --radius-card: 12px;
+  --radius-frame: 16px;
 
-  --shadow-sm: 0 1px 2px rgba(20, 24, 31, 0.06), 0 1px 1px rgba(20, 24, 31, 0.04);
+  --shadow-sm: 0 1px 2px rgba(42, 24, 26, 0.06), 0 1px 1px rgba(42, 24, 26, 0.04);
 
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 /* ---- light theme (default) ---- */
 :root {
-  --c-bg: #F7F8FA;
+  --c-bg: #FAF6F5;
   --c-surface: #FFFFFF;
-  --c-surface2: #F1F3F6;
-  --c-ink: #14181F;
-  --c-muted: #566070;
-  --c-faint: #5E6773;
-  --c-line: rgba(20, 24, 31, 0.08);
-  --c-line-strong: rgba(20, 24, 31, 0.15);
-  --c-grid: rgba(20, 24, 31, 0.04);
-  --c-accent: #0E7C86;
-  --c-accent-hover: #0A626B;
-  --c-accent-2: #0B5563;
-  --c-accent-soft: rgba(14, 124, 134, 0.08);
-  --c-selection: rgba(14, 124, 134, 0.16);
-  --c-scrim: rgba(20, 24, 31, 0.55);
+  --c-surface2: #F5ECEB;
+  --c-ink: #2A1A1C;
+  --c-muted: #5E4749;
+  --c-faint: #7C6163;
+  --c-line: rgba(42, 26, 28, 0.10);
+  --c-line-strong: rgba(42, 26, 28, 0.16);
+  --c-grid: rgba(42, 26, 28, 0.04);
+  --c-accent: #B3202B;
+  --c-accent-hover: #921620;
+  --c-accent-2: #7C1522;
+  --c-accent-soft: rgba(179, 32, 43, 0.09);
+  --c-selection: rgba(179, 32, 43, 0.16);
+  --c-scrim: rgba(42, 26, 28, 0.55);
   --c-on-accent: #FFFFFF;
-  --c-bloom: #8FD6DB;
-  --c-focus: #0E7C86;
-  --c-success: #1B6E44;
-  --c-warn: #8A5200;
-  --c-danger: #B32D24;
+  --c-bloom: #F2C0C4;
+  --c-focus: #B3202B;
+  --c-success: #15794A;
+  --c-warn: #9C5600;
+  --c-danger: #CE3A2A;
   --c-info: #2C6BAD;
-  --frame-shadow: 0 24px 64px -32px rgba(20, 24, 31, 0.18);
+  --frame-shadow: 0 1px 2px rgba(42, 24, 26, 0.05), 0 18px 44px -24px rgba(42, 24, 26, 0.22);
   --edge-highlight: transparent;
   color-scheme: light;
 }
 
 /* ---- dark theme (engineered scale, not an inversion) ---- */
 :root[data-theme="dark"] {
-  --c-bg: #08090A;
-  --c-surface: #0F1114;
-  --c-surface2: #15181C;
-  --c-ink: #EDF0F4;
-  --c-muted: #9BA5B5;
-  --c-faint: #8B95A4;
-  --c-line: rgba(255, 255, 255, 0.08);
-  --c-line-strong: rgba(255, 255, 255, 0.14);
+  --c-bg: #150F0F;
+  --c-surface: #201717;
+  --c-surface2: #291D1E;
+  --c-ink: #F3E9E9;
+  --c-muted: #C0A9AA;
+  --c-faint: #9A7F81;
+  --c-line: rgba(255, 255, 255, 0.09);
+  --c-line-strong: rgba(255, 255, 255, 0.15);
   --c-grid: rgba(255, 255, 255, 0.04);
-  --c-accent: #2CC2CE;
-  --c-accent-hover: #4FD6E0;
-  --c-accent-2: #4FD6E0;
-  --c-accent-soft: rgba(44, 194, 206, 0.12);
-  --c-selection: rgba(44, 194, 206, 0.30);
+  --c-accent: #F26D74;
+  --c-accent-hover: #F58890;
+  --c-accent-2: #F58890;
+  --c-accent-soft: rgba(242, 109, 116, 0.14);
+  --c-selection: rgba(242, 109, 116, 0.30);
   --c-scrim: rgba(0, 0, 0, 0.62);
-  --c-on-accent: #04161A;
-  --c-bloom: #12494E;
-  --c-focus: #2CC2CE;
+  --c-on-accent: #2A0E10;
+  --c-bloom: #5A2327;
+  --c-focus: #F26D74;
   --c-success: #52CD96;
   --c-warn: #E5A94F;
-  --c-danger: #ED7E73;
+  --c-danger: #F0705B;
   --c-info: #6FAAE6;
-  --frame-shadow: 0 24px 64px -32px rgba(0, 0, 0, 0.6);
+  --frame-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 22px 52px -26px rgba(0, 0, 0, 0.66);
   --edge-highlight: rgba(255, 255, 255, 0.04);
   color-scheme: dark;
 }
@@ -122,7 +123,7 @@
   }
   ::selection { background: var(--c-selection); color: var(--c-ink); }
 
-  h1, h2, h3, h4 { margin: 0; font-weight: 500; }
+  h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   p { margin: 0; }
   a { color: inherit; text-decoration: none; }
   button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
@@ -152,46 +153,23 @@
   background-clip: content-box;
 }
 
-/* ---------------------------------------------------------------- signature: blueprint grid */
-.blueprint {
-  background-image:
-    linear-gradient(to right, var(--c-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--c-grid) 1px, transparent 1px);
-  background-size: 24px 24px;
-  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 30%, transparent 78%);
-  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 30%, transparent 78%);
-}
+/* ---------------------------------------------------------------- signature (retired)
+   The old "blueprint grid" + corner plus-marks read as over-designed; they are
+   intentionally neutralized here so the shared markup renders clean surfaces. */
+.blueprint { display: none; }
+.corners > .cm { display: none; }
 
-/* teal hero bloom (used exactly once) */
+/* soft branded hero glow (a single quiet wash of the accent, used in the hero) */
 .bloom {
-  background: radial-gradient(ellipse 55% 45% at 50% 42%, var(--c-bloom), transparent 70%);
-  opacity: 0.4;
+  background: radial-gradient(ellipse 55% 48% at 50% 38%, color-mix(in srgb, var(--c-accent) 20%, transparent), transparent 72%);
+  opacity: 0.34;
 }
-:root[data-theme="dark"] .bloom { opacity: 0.6; }
+:root[data-theme="dark"] .bloom { opacity: 0.28; }
 
-/* corner plus-marks (technical-drawing tell) */
-.corners { position: relative; }
-.corners > .cm {
-  position: absolute;
-  width: 9px; height: 9px;
-  color: var(--c-line-strong);
-  pointer-events: none;
-  z-index: 1;
-}
-.corners > .cm::before, .corners > .cm::after {
-  content: ""; position: absolute; background: currentColor;
-}
-.corners > .cm::before { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-0.5px); }
-.corners > .cm::after { top: 50%; left: 0; height: 1px; width: 100%; transform: translateY(-0.5px); }
-.corners > .cm.tl { top: -5px; left: -5px; }
-.corners > .cm.tr { top: -5px; right: -5px; }
-.corners > .cm.bl { bottom: -5px; left: -5px; }
-.corners > .cm.br { bottom: -5px; right: -5px; }
-
-/* app-frame grounding shadow + dark edge highlight */
+/* app-frame: the tool container reads as one clean elevated card */
 .app-frame {
   box-shadow: var(--frame-shadow);
-  border: 1px solid var(--c-line-strong);
+  border: 1px solid var(--c-line);
 }
 :root[data-theme="dark"] .app-frame {
   box-shadow: var(--frame-shadow), inset 0 1px 0 0 var(--edge-highlight);
@@ -202,6 +180,7 @@
 .step-in { animation: stepin 0.3s var(--ease-out) both; }
 @keyframes toastin { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .toast-in { animation: toastin 0.2s var(--ease-out) both; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
 /* de-id preview highlight */
 mark.deid-hit {

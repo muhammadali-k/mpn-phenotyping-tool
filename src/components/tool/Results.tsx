@@ -19,7 +19,7 @@ const SRC_STYLE: Record<SourceTag, string> = {
   note: 'text-muted border-line bg-surface2',
 }
 const VERDICT_STATUS: Record<string, Status> = { confirmed: 'success', suspicious: 'warn', not: 'neutral' }
-const VERDICT_WORD: Record<string, string> = { confirmed: 'Confirmed', suspicious: 'Suspicious — not confirmed', not: 'Criteria not met' }
+const VERDICT_WORD: Record<string, string> = { confirmed: 'Confirmed', suspicious: 'Suspicious, not confirmed', not: 'Criteria not met' }
 
 export function Results({ result, extraction }: { result: ClassifyResult; extraction?: Extraction }) {
   const { diagnosis: dx, prognosis: prog, merged } = result
@@ -135,7 +135,7 @@ export function Results({ result, extraction }: { result: ClassifyResult; extrac
 
       <div className="mt-5 flex gap-2.5 rounded-[8px] bg-[color-mix(in_srgb,var(--c-warn)_10%,transparent)] px-4 py-3.5 text-[12.5px] text-warn">
         <TriangleAlert size={17} className="mt-0.5 shrink-0" />
-        <span><strong>Investigational output.</strong> An automated application of published WHO criteria for decision support — not a diagnosis. A qualified hematologist must confirm all findings.</span>
+        <span><strong>Investigational output.</strong> An automated application of published WHO criteria for decision support, not a diagnosis. A qualified hematologist must confirm all findings.</span>
       </div>
     </SourceProvider>
   )
@@ -215,8 +215,8 @@ function PrognosisSection({ result, toolChipN }: { result: ClassifyResult; toolC
     const msg = prog.gatedReason === 'suspicious'
       ? 'Prognostic scoring is not performed while a diagnosis is only suspicious. Confirm the diagnosis to run the applicable prognostic model.'
       : prog.gatedReason === 'conflict'
-      ? 'More than one diagnosis met full criteria — resolve the diagnostic conflict before prognostic scoring.'
-      : 'No confirmed MPN — no prognostic model applies.'
+      ? 'More than one diagnosis met full criteria; resolve the diagnostic conflict before prognostic scoring.'
+      : 'No confirmed MPN: no prognostic model applies.'
     return (
       <div className="rounded-[10px] border border-line bg-surface px-5 py-6 text-[13px] text-muted">
         <span className="font-medium text-ink">Prognostic category not established.</span> {msg}

@@ -107,7 +107,7 @@ export function EntryModeModal({
 
       {mode === 'llm' && onDevice && (
         <div className="mt-4 rounded-[8px] border border-line bg-surface2 px-4 py-3 text-[13px] text-muted">
-          <strong className="text-ink">Runs entirely on your device</strong> — nothing is sent to any server.
+          <strong className="text-ink">Runs entirely on your device</strong>; nothing is sent to any server.
         </div>
       )}
 
@@ -135,7 +135,7 @@ export function EntryModeModal({
               onClick={onUsePuter}
               className="underline-offset-4 transition-colors hover:text-ink hover:underline"
             >
-              or use Puter — no setup (slower)
+              or use Puter, no setup (slower)
             </button>
           </div>
         </div>

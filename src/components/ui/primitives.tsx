@@ -161,7 +161,7 @@ export function SourceRail({ sources }: { sources: SourceItem[] }) {
           >
             <span className="mt-[1px] font-mono text-[11px] font-medium text-accent tnum">{s.n}</span>
             <span className="text-muted">
-              <span className="font-medium text-ink">{s.label}</span> — {s.citation}
+              <span className="font-medium text-ink">{s.label}</span>: {s.citation}
             </span>
           </li>
         ))}

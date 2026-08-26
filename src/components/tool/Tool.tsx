@@ -349,10 +349,10 @@ function StepReports(props: {
         <Eyebrow>How it works</Eyebrow>
         <ol className="mt-3 space-y-3 text-[13px] text-muted">
           {[
-            <><strong className="text-ink">De-identify &amp; paste</strong> a clinical note and/or pathology report — both optional.</>,
-            <>Your chosen AI provider extracts structured variables browser-direct. <strong className="text-ink">Groq</strong> is the fast, free default — paste a one-time free key (no credit card, no popups). Or pick Puter for zero-setup, an on-device model, or your own OpenAI, Anthropic, or Gemini key.</>,
-            <><strong className="text-ink">Review &amp; complete</strong> the structured form; findings that are pending or not documented are left for you to confirm — never assumed negative.</>,
-            <>Get an independent <strong className="text-ink">WHO 2016/2022 assessment</strong> of PV, ET, and overt MF — confirmed, suspicious, or not — plus <strong className="text-ink">prognostic scoring</strong> once a diagnosis is confirmed, each traced to its source.</>,
+            <><strong className="text-ink">De-identify &amp; paste</strong> a clinical note and/or pathology report, both optional.</>,
+            <>Your chosen AI provider extracts structured variables browser-direct. <strong className="text-ink">Groq</strong> is the fast, free default: paste a one-time free key (no credit card, no popups). Or pick Puter for zero-setup, an on-device model, or your own OpenAI, Anthropic, or Gemini key.</>,
+            <><strong className="text-ink">Review &amp; complete</strong> the structured form; findings that are pending or not documented are left for you to confirm, never assumed negative.</>,
+            <>Get an independent <strong className="text-ink">WHO 2016/2022 assessment</strong> of PV, ET, and overt MF (confirmed, suspicious, or not) plus <strong className="text-ink">prognostic scoring</strong> once a diagnosis is confirmed, each traced to its source.</>,
           ].map((t, i) => (
             <li key={i} className="flex gap-3">
               <span className="mt-[1px] font-mono text-[11px] font-medium text-faint tnum">{String(i + 1).padStart(2, '0')}</span>
@@ -361,7 +361,7 @@ function StepReports(props: {
           ))}
         </ol>
         <div className="mt-5 rounded-[8px] border border-line bg-surface px-4 py-3 text-[12.5px] text-muted">
-          <span className="text-info">No note?</span> Choose <strong className="text-ink">Enter data manually</strong> from the entry-mode pop-up — diagnosis works from structured variables alone.
+          <span className="text-info">No note?</span> Choose <strong className="text-ink">Enter data manually</strong> from the entry-mode pop-up: diagnosis works from structured variables alone.
         </div>
       </aside>
     </div>
@@ -391,7 +391,7 @@ function StepVariables({ form, setForm, extracted, onFile, lastExtract, onBack, 
       <Eyebrow>Step 02 · source priority: structured › pathology › note</Eyebrow>
       <h3 className="mt-1.5 font-display text-[28px] leading-tight tracking-[-0.015em]">Review &amp; complete structured variables</h3>
       <p className="mt-1.5 max-w-[70ch] text-[14px] text-muted">
-        Values extracted from free text are pre-filled and tagged by source. Edit anything, and add whatever labs, molecular, and cytogenetic data you have — the more complete the inputs, the more criteria can be assessed and the applicable prognostic model applied. A blank field is treated as unavailable, not negative.
+        Values extracted from free text are pre-filled and tagged by source. Edit anything, and add whatever labs, molecular, and cytogenetic data you have; the more complete the inputs, the more criteria can be assessed and the applicable prognostic model applied. A blank field is treated as unavailable, not negative.
       </p>
 
       {extractedKeys.length > 0 && (
@@ -473,17 +473,17 @@ function StepResults({ result, extracted, lastExtract, onBack, onCopy }: {
 function buildSummary(r: ClassifyResult): string {
   const { diagnosis: dx, prognosis: prog, merged } = r
   const L: string[] = []
-  L.push('MPN PHENOTYPING — investigational output')
+  L.push('MPN PHENOTYPING: investigational output')
   L.push('='.repeat(44))
   L.push(`Diagnostic assessment (${dx.whoEdition}): ${dx.headline}`)
   L.push(`Summary: ${dx.summary}`)
   L.push('')
   L.push('Per-disease criteria (independent assessment):')
   dx.assessments.forEach((a) => {
-    L.push(`  ${a.name} (${a.disease}) — ${a.label}`)
+    L.push(`  ${a.name} (${a.disease}): ${a.label}`)
     a.criteria.forEach((c) => {
       const m = c.status === 'met' ? '[x]' : c.status === 'not_met' ? '[ ]' : '[?]'
-      L.push(`    ${m} (${c.tier}) ${c.label}${c.detail ? '  — ' + c.detail : ''}`)
+      L.push(`    ${m} (${c.tier}) ${c.label}${c.detail ? '  · ' + c.detail : ''}`)
     })
     if (a.verdict === 'suspicious' && a.outstanding.length) {
       L.push(`    Additional information required: ${a.outstanding.join('; ')}`)
@@ -495,7 +495,7 @@ function buildSummary(r: ClassifyResult): string {
   }
   L.push(''); L.push('Prognostic assessment:')
   if (prog.gatedReason) {
-    L.push(`  Prognostic category not established — ${prog.gatedReason === 'suspicious' ? 'diagnosis not confirmed' : prog.gatedReason === 'conflict' ? 'diagnostic conflict' : 'no confirmed MPN'}. No prognostic scoring performed.`)
+    L.push(`  Prognostic category not established: ${prog.gatedReason === 'suspicious' ? 'diagnosis not confirmed' : prog.gatedReason === 'conflict' ? 'diagnostic conflict' : 'no confirmed MPN'}. No prognostic scoring performed.`)
   } else {
     prog.order.forEach((k) => {
       const t = prog.tools[k]; if (!t) return

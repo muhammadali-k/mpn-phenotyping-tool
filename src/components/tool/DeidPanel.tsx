@@ -41,7 +41,7 @@ export function DeidPanel({
       )}
 
       <p className="mt-2.5 text-[11.5px] text-faint">
-        Scanning runs entirely in your browser. Pattern matching is assistive only and can miss identifiers — notably a <strong>plain name with no title or label</strong>. You remain responsible for de-identification.
+        Scanning runs entirely in your browser. Pattern matching is assistive only and can miss identifiers, notably a <strong>plain name with no title or label</strong>. You remain responsible for de-identification.
       </p>
 
       <Modal
@@ -49,7 +49,7 @@ export function DeidPanel({
         onOpenChange={setPreviewOpen}
         wide
         title="Redaction preview"
-        description={<>Highlighted spans are what the in-browser scrubber would redact, replacing them with placeholders like <code className="font-mono">[NAME]</code>, <code className="font-mono">[DATE]</code>, <code className="font-mono">[ID]</code>. Review carefully — this is a safety net, not a guarantee.</>}
+        description={<>Highlighted spans are what the in-browser scrubber would redact, replacing them with placeholders like <code className="font-mono">[NAME]</code>, <code className="font-mono">[DATE]</code>, <code className="font-mono">[ID]</code>. Review carefully; this is a safety net, not a guarantee.</>}
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setPreviewOpen(false)}>Close</Button>

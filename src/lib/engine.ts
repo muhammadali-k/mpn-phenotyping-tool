@@ -230,14 +230,14 @@ export const DISEASE_NAME: Record<DiseaseCode, string> = {
 
 export const PROVIDERS: Record<ProviderKey, Provider> = {
   groq: {
-    key: 'groq', label: 'Groq — free, fast', accent: '#f55036',
-    keyPlaceholder: 'gsk_...', keyHelp: 'Create a free key at console.groq.com/keys — no credit card',
+    key: 'groq', label: 'Groq (free, fast)', accent: '#f55036',
+    keyPlaceholder: 'gsk_...', keyHelp: 'Create a free key at console.groq.com/keys (no credit card)',
     keyPattern: /^gsk_/, getKeyUrl: 'https://console.groq.com/keys',
     models: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
     defaultModel: 'openai/gpt-oss-120b',
   },
   puter: {
-    key: 'puter', label: 'Puter.js — free, no key', accent: '#6851ff',
+    key: 'puter', label: 'Puter.js (free, no key)', accent: '#6851ff',
     keyPlaceholder: '', keyHelp: '', keyPattern: /.*/,
     models: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o', 'gpt-5-mini', 'claude-sonnet-4-5', 'gemini-2.5-flash'],
     defaultModel: 'gpt-4.1-mini', keyless: true,
@@ -539,7 +539,7 @@ function evalPV(v: Variables): DiseaseEval {
   if (eryAmbiguous) ery1detail += ' (sex needed for threshold)'
 
   const criteria: Criterion[] = [
-    { disease: 'PV', tier: 'major', label: 'Erythrocytosis — Hb >16.5 (M)/>16.0 (F) g/dL, Hct >49% (M)/>48% (F), or increased red cell mass', status: major1, detail: ery1detail },
+    { disease: 'PV', tier: 'major', label: 'Erythrocytosis: Hb >16.5 (M)/>16.0 (F) g/dL, Hct >49% (M)/>48% (F), or increased red cell mass', status: major1, detail: ery1detail },
     { disease: 'PV', tier: 'major', label: 'BM trilineage panmyelosis with pleomorphic mature megakaryocytes', status: major2, detail: mp ? String(mp).replace(/_/g, ' ') + (v.bm_cellularity ? ', ' + v.bm_cellularity : '') : (truthy(v.panmyelosis) ? 'panmyelosis; morphology not characterised' : '') },
     { disease: 'PV', tier: 'major', label: 'JAK2 V617F or JAK2 exon 12 mutation', status: major3, detail: isPos(v.jak2_v617f) ? 'JAK2 V617F+' : (isPos(v.jak2_exon12) ? 'JAK2 exon 12+' : (jak2Known ? 'JAK2 negative' : '')) },
     { disease: 'PV', tier: 'minor', label: 'Subnormal serum erythropoietin', status: minor, detail: v.epo ? 'EPO ' + v.epo : '' },
@@ -682,7 +682,7 @@ function outstandingFrom(criteria: Criterion[]): string[] {
 function assessmentLabel(disease: DiseaseCode, verdict: DiseaseVerdict): string {
   const nm = disease === 'MF' ? 'overt MF' : disease
   if (verdict === 'confirmed') return 'Confirmed ' + nm
-  if (verdict === 'suspicious') return 'Suspicious for ' + nm + ' — diagnosis not confirmed'
+  if (verdict === 'suspicious') return 'Suspicious for ' + nm + ': diagnosis not confirmed'
   return 'Criteria for ' + nm + ' not met'
 }
 
@@ -724,10 +724,10 @@ export function diagnose(v: Variables): Diagnosis {
     outcome = 'confirmed'
     headline = confirmedList.map((d) => 'Confirmed ' + nm(d)).join(' + ')
     summary = 'All required WHO criteria are met for ' + confirmedList.map(nm).join(' and ') + '.'
-    if (conflict) summary = 'Diagnostic conflict — more than one disease met full criteria; review required. ' + summary
+    if (conflict) summary = 'Diagnostic conflict: more than one disease met full criteria; review required. ' + summary
   } else if (suspiciousList.length) {
     outcome = 'suspicious'
-    headline = 'Suspicious for ' + suspiciousList.map(nm).join(' and ') + ' — diagnosis not confirmed'
+    headline = 'Suspicious for ' + suspiciousList.map(nm).join(' and ') + ': diagnosis not confirmed'
     summary = 'Supportive features are present but full WHO criteria are not met for ' +
       suspiciousList.map(nm).join(' or ') + '. A confirmed diagnosis has not been established; complete the outstanding investigations.'
   } else {
@@ -746,7 +746,7 @@ export function diagnose(v: Variables): Diagnosis {
   // Overlap flag: another disease confirmed while PV-defining erythrocytosis is present.
   const pvErythrocytosis = pv.criteria[0]?.status === 'met'
   if (!pv.confirmed && (et.confirmed || mf.confirmed) && pvErythrocytosis) {
-    caveats.push('Concurrent erythrocytosis is present alongside another confirmed MPN — consider masked or post-PV disease and correlate clinically.')
+    caveats.push('Concurrent erythrocytosis is present alongside another confirmed MPN; consider masked or post-PV disease and correlate clinically.')
   }
   if (outcome !== 'none') caveats.push('WHO minor criteria and reactive causes should be confirmed on repeat determination; single-timepoint data cannot establish sustained findings.')
 
@@ -827,10 +827,10 @@ export function prognose(dx: Diagnosis, v: Variables): Prognosis {
         pt('History of thrombosis', thromboKnown ? (thrombo ? 'yes' : 'no') : '?', String(v.thrombosis_type || '')),
       ],
       note: !established
-        ? 'Prognostic category not established — age and thrombosis history are both required (a single known positive suffices for high risk; low risk needs both known negative).'
+        ? 'Prognostic category not established: age and thrombosis history are both required (a single known positive suffices for high risk; low risk needs both known negative).'
         : high
-        ? 'High thrombotic risk — cytoreduction (e.g. hydroxyurea) plus low-dose aspirin and Hct <45% typically indicated.'
-        : 'Low thrombotic risk — phlebotomy to Hct <45% and low-dose aspirin; cytoreduction generally reserved for intolerance or progression.',
+        ? 'High thrombotic risk: cytoreduction (e.g. hydroxyurea) plus low-dose aspirin and Hct <45% typically indicated.'
+        : 'Low thrombotic risk: phlebotomy to Hct <45% and low-dose aspirin; cytoreduction generally reserved for intolerance or progression.',
       evidence: 'Thrombotic risk stratified by age ≥60 and prior thrombosis.',
       citation: 'Marchioli 2005; Barbui 2011 (ELN)',
     }
@@ -869,11 +869,11 @@ export function prognose(dx: Diagnosis, v: Variables): Prognosis {
         pt('JAK2 V617F', jak2Known ? (jak2 ? 'positive' : 'negative') : '?', ''),
       ],
       note: tEstablished
-        ? (tTier === 'high' ? 'High thrombotic risk — cytoreduction plus antiplatelet therapy generally recommended.'
-          : tTier === 'int' ? 'Intermediate risk — antiplatelet therapy; cytoreduction individualized.'
-          : tTier === 'low' ? 'Low risk — low-dose aspirin usually sufficient.'
-          : 'Very low risk — observation or aspirin depending on cardiovascular risk.')
-        : 'Prognostic category not established — age, prior thrombosis and JAK2 status are all required.',
+        ? (tTier === 'high' ? 'High thrombotic risk: cytoreduction plus antiplatelet therapy generally recommended.'
+          : tTier === 'int' ? 'Intermediate risk: antiplatelet therapy; cytoreduction individualized.'
+          : tTier === 'low' ? 'Low risk: low-dose aspirin usually sufficient.'
+          : 'Very low risk: observation or aspirin depending on cardiovascular risk.')
+        : 'Prognostic category not established: age, prior thrombosis and JAK2 status are all required.',
       evidence: 'Four-tier thrombosis model by age, thrombosis history and JAK2 status.',
       citation: 'Barbui 2012 (revised)',
     }
@@ -907,7 +907,7 @@ export function prognose(dx: Diagnosis, v: Variables): Prognosis {
       category: sCat, tier: sTier, total: sPts,
       requiredMissing: sEstablished ? [] : sMissing.map(label), points: sRows,
       note: sEstablished ? 'Survival model: low median not reached; intermediate ≈24.5 yr; high ≈13.8 yr.'
-        : 'Prognostic category not established — age, WBC and prior thrombosis are all required.',
+        : 'Prognostic category not established: age, WBC and prior thrombosis are all required.',
       evidence: 'Overall-survival companion to IPSET.', citation: 'Passamonti 2012 (IPSET)',
     }
     out.order.push('ipset_s')
@@ -946,8 +946,8 @@ export function prognose(dx: Diagnosis, v: Variables): Prognosis {
       key: 'dipss', name: 'DIPSS', applicable: true, status: dEstablished ? 'established' : 'not_established',
       category: dCat, tier: dTier, total: dPts, requiredMissing: dEstablished ? [] : dMissing.map(label), points: dRows,
       note: dEstablished ? 'Median survival: low not reached; Int-1 ≈14.2 yr; Int-2 ≈4.0 yr; high ≈1.5 yr.'
-        : 'Prognostic category not established — all five DIPSS variables are required.',
-      evidence: 'Dynamic IPSS — applicable at any point in the disease course.', citation: 'Passamonti 2010',
+        : 'Prognostic category not established: all five DIPSS variables are required.',
+      evidence: 'Dynamic IPSS: applicable at any point in the disease course.', citation: 'Passamonti 2010',
     }
 
     // DIPSS+ — DIPSS base plus karyotype, platelets, transfusion.
@@ -972,7 +972,7 @@ export function prognose(dx: Diagnosis, v: Variables): Prognosis {
       key: 'dipss_plus', name: 'DIPSS+', applicable: true, status: pEstablished ? 'established' : 'not_established',
       category: pCat, tier: pTier, total: pPts, requiredMissing: pEstablished ? [] : pMissing.map(label), points: pRows,
       note: pEstablished ? 'Adds karyotype, thrombocytopenia and transfusion need to DIPSS.'
-        : 'Prognostic category not established — requires DIPSS plus karyotype, platelets and transfusion status.',
+        : 'Prognostic category not established: requires DIPSS plus karyotype, platelets and transfusion status.',
       evidence: 'Refines DIPSS with cytogenetic and clinical variables.', citation: 'Gangat 2011',
     }
 
@@ -1008,7 +1008,7 @@ export function prognose(dx: Diagnosis, v: Variables): Prognosis {
       key: 'mipss70', name: 'MIPSS70', applicable: true, status: mEstablished ? 'established' : 'not_established',
       category: mCat, tier: mTier, total: mPts, requiredMissing: mEstablished ? [] : mMissing.map(label), points: mRows,
       note: mEstablished ? 'Mutation-enhanced IPSS for transplant-age patients (clinical + molecular).'
-        : 'Prognostic category not established — requires the full clinical panel plus CALR status and HMR sequencing.',
+        : 'Prognostic category not established: requires the full clinical panel plus CALR status and HMR sequencing.',
       evidence: '5-yr survival: low ≈95%, intermediate ≈70%, high ≈29%.', citation: 'Guglielmelli 2018',
     }
 
@@ -1042,7 +1042,7 @@ export function prognose(dx: Diagnosis, v: Variables): Prognosis {
       key: 'mipss70v2', name: 'MIPSS70+ v2.0', applicable: true, status: vEstablished ? 'established' : 'not_established',
       category: vCat, tier: vTier, total: vPts, requiredMissing: vEstablished ? [] : vMissing.map(label), points: vRows,
       note: vEstablished ? 'Karyotype- and mutation-enhanced 5-tier model for transplant-age PMF.'
-        : 'Prognostic category not established — requires cytogenetics, molecular data and sex-adjusted anemia.',
+        : 'Prognostic category not established: requires cytogenetics, molecular data and sex-adjusted anemia.',
       evidence: '10-yr survival: very low ≈92%, low ≈56%, intermediate ≈37%, high ≈13%, very high ≈7%.', citation: 'Tefferi 2018',
     }
 
@@ -1360,7 +1360,7 @@ function puterToolsUnsupported(error: unknown): boolean {
 function throwFriendlyPuterError(error: unknown): never {
   const message = puterErrorText(error)
   if (/sign[\s_-]?in|signin|log[\s_-]?in|auth(?:entication|orization)?|unauthori[sz]ed|(?:popup|window).*(?:cancel|clos|block)|user.*cancel|cancel(?:led|ed)?/i.test(message)) {
-    throw new Error('Puter sign-in was cancelled or failed — try again, or switch to On-device (WebLLM) or your own API key.')
+    throw new Error('Puter sign-in was cancelled or failed. Try again, or switch to On-device (WebLLM) or your own API key.')
   }
   if (error instanceof Error) throw error
   throw new Error(message || 'Puter.js could not complete the extraction.')
@@ -1539,7 +1539,7 @@ export async function callLLM(
 export interface Example { label: string; inputs: PromptInputs }
 export const EXAMPLES: Record<string, Example> = {
   pv: {
-    label: 'PV — 62M erythrocytosis',
+    label: 'PV: 62M erythrocytosis',
     inputs: {
       age: 62, sex: 'male', hemoglobin: 19.4, hematocrit: 57, wbc: 12.1, platelets: 498, ldh: 245, ldh_uln: 250, peripheral_blasts: 0, epo: 'low',
       jak2_v617f: 'positive', jak2_exon12: 'negative', calr: 'negative', mpl: 'negative', bcr_abl1: 'negative',
@@ -1550,7 +1550,7 @@ export const EXAMPLES: Record<string, Example> = {
     },
   },
   et: {
-    label: 'ET — 48F thrombocytosis',
+    label: 'ET: 48F thrombocytosis',
     inputs: {
       age: 48, sex: 'female', hemoglobin: 13.5, hematocrit: 40, wbc: 8.9, platelets: 812, ldh: 210, ldh_uln: 250, peripheral_blasts: 0, epo: 'normal',
       jak2_v617f: 'positive', jak2_exon12: 'negative', calr: 'negative', mpl: 'negative', bcr_abl1: 'negative',
@@ -1561,7 +1561,7 @@ export const EXAMPLES: Record<string, Example> = {
     },
   },
   mf: {
-    label: 'Overt MF — 71M cytopenias + splenomegaly',
+    label: 'Overt MF: 71M cytopenias + splenomegaly',
     inputs: {
       age: 71, sex: 'male', hemoglobin: 9.1, hematocrit: 28, wbc: 27, platelets: 95, ldh: 540, ldh_uln: 250, peripheral_blasts: 3, epo: 'normal',
       jak2_v617f: 'positive', jak2_exon12: 'negative', calr: 'negative', mpl: 'negative', bcr_abl1: 'negative',

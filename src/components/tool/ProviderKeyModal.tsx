@@ -94,8 +94,8 @@ export function ProviderKeyModal() {
       {keyless ? (
         <div className="mb-4 rounded-[8px] border border-line bg-surface2 px-4 py-3 text-[13px] text-muted">
           {pending === 'puter'
-            ? 'No API key required — free, shared cloud service.'
-            : 'Runs on your device — no key, no data leaves the browser.'}
+            ? 'No API key required: free, shared cloud service.'
+            : 'Runs on your device: no key, no data leaves the browser.'}
         </div>
       ) : (
         <label className="mb-4 block">
@@ -158,7 +158,7 @@ export function ProviderKeyModal() {
             <>The model runs <strong>on-device</strong>. Your text and model request stay in this browser.</>
           )}
           {!keyless && (
-            <>Keys are used <strong>browser-direct</strong> to the provider — never sent to any server of ours. Prefer a scoped, limited key; never paste a shared production key on a shared computer.</>
+            <>Keys are used <strong>browser-direct</strong> to the provider; never sent to any server of ours. Prefer a scoped, limited key; never paste a shared production key on a shared computer.</>
           )}
         </span>
       </div>
