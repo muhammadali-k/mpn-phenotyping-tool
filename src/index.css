@@ -191,6 +191,21 @@ mark.deid-hit {
   font-weight: 600;
 }
 
+/* ---------------------------------------------------------------- print
+   Print the assessment only: landing sections, navigation, controls and the
+   sticky header are dropped; cards expand (see Results PrintContext) and
+   nothing is clipped or elevated. */
+@media print {
+  header, footer, nav, .no-print, section:not(#tool) { display: none !important; }
+  #tool { border: none !important; }
+  #tool .app-frame { box-shadow: none !important; border: none !important; }
+  #tool .print-hide, #tool [role="status"] { display: none !important; }
+  body { background: #fff !important; color: #000 !important; font-size: 12px; }
+  .scroll { overflow: visible !important; }
+  * { transition: none !important; animation: none !important; }
+  a { color: inherit; text-decoration: none; }
+}
+
 /* respect reduced motion — motion snaps to end-state */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

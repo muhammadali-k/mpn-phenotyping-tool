@@ -704,7 +704,11 @@ function evalMF(v: Variables, pvConfirmed: boolean, etConfirmed: boolean): Disea
   // Minors
   const mAnemia = tri(hb !== null, (sex === 'male' && hb !== null && hb < 13) || ((sex === 'female' || !sex) && hb !== null && hb < 12))
   const mLeuko = tri(wbc !== null, wbc !== null && wbc >= 11)
-  const mSpleen = tri(v.splenomegaly !== undefined || v.spleen_cm !== undefined, truthy(v.splenomegaly) || (num(v.spleen_cm) || 0) > 0)
+  // An explicit "not palpable" alongside a measured spleen is a conflict, not a
+  // finding: neither value is trusted until it is resolved.
+  const spleenConflict = v.splenomegaly === false && (num(v.spleen_cm) || 0) > 0
+  const mSpleen = spleenConflict ? 'unavailable'
+    : tri(v.splenomegaly !== undefined || v.spleen_cm !== undefined, truthy(v.splenomegaly) || (num(v.spleen_cm) || 0) > 0)
   const mLDH = tri(ldh !== null, ldh !== null && ldh > uln)
   const mLEB = tri(v.leukoerythroblastosis !== undefined, truthy(v.leukoerythroblastosis))
   const minors = [mAnemia, mLeuko, mSpleen, mLDH, mLEB]
@@ -814,6 +818,15 @@ export function diagnose(v: Variables): Diagnosis {
   const hbCaveat = num(v.hemoglobin)
   if (truthy(v.transfusion_dependent) && hbCaveat !== null && hbCaveat >= 12) {
     caveats.push('Transfusion dependence is recorded with a hemoglobin of ' + hbCaveat + ' g/dL; confirm, as a recent transfusion can mask anemia grading.')
+  }
+  // Hb and Hct are independent WHO criteria, but physiologically Hct is about 3 × Hb:
+  // a wide discordance points to a transcription or unit error in one of them.
+  const hctCaveat = num(v.hematocrit)
+  if (hbCaveat !== null && hctCaveat !== null && Math.abs(hctCaveat - 3 * hbCaveat) > 9) {
+    caveats.push('Hemoglobin ' + hbCaveat + ' g/dL and hematocrit ' + hctCaveat + '% are inconsistent with each other (hematocrit is usually about 3 × hemoglobin); verify both values before relying on the erythrocytosis criterion.')
+  }
+  if (v.splenomegaly === false && (num(v.spleen_cm) || 0) > 0) {
+    caveats.push('Splenomegaly is recorded as not palpable but a spleen size of ' + v.spleen_cm + ' cm is entered; the splenomegaly criterion was left unavailable until this is resolved.')
   }
   if (outcome !== 'none') caveats.push('WHO minor criteria and reactive causes should be confirmed on repeat determination; single-timepoint data cannot establish sustained findings.')
 

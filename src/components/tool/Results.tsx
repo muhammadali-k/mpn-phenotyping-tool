@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { Check, ChevronRight, CircleHelp, TriangleAlert, X } from 'lucide-react'
 import {
   FIELD_BY_KEY, GROUP_LABEL, GROUP_ORDER, type ClassifyResult, type Criterion, type CriterionStatus,
@@ -21,8 +21,24 @@ const SRC_STYLE: Record<SourceTag, string> = {
 const VERDICT_STATUS: Record<string, Status> = { confirmed: 'success', suspicious: 'warn', not: 'neutral' }
 const VERDICT_WORD: Record<string, string> = { confirmed: 'Confirmed', suspicious: 'Suspicious, not confirmed', not: 'Criteria not met' }
 
+/* While printing, every collapsible card is forced open so the printout is the
+   complete assessment, not whatever happened to be expanded on screen. */
+const PrintContext = createContext(false)
+function usePrinting(): boolean {
+  const [printing, setPrinting] = useState(false)
+  useEffect(() => {
+    const on = () => setPrinting(true)
+    const off = () => setPrinting(false)
+    window.addEventListener('beforeprint', on)
+    window.addEventListener('afterprint', off)
+    return () => { window.removeEventListener('beforeprint', on); window.removeEventListener('afterprint', off) }
+  }, [])
+  return printing
+}
+
 export function Results({ result, extraction }: { result: ClassifyResult; extraction?: Extraction }) {
   const { diagnosis: dx, prognosis: prog, merged } = result
+  const printing = usePrinting()
   const outcomeStatus: Status = dx.outcome === 'confirmed' ? 'success' : dx.outcome === 'suspicious' ? 'warn' : 'neutral'
 
   // deterministic citation list: [1] WHO, then one per applicable prognosis tool
@@ -37,6 +53,7 @@ export function Results({ result, extraction }: { result: ClassifyResult; extrac
   })
 
   return (
+    <PrintContext.Provider value={printing}>
     <SourceProvider>
       {/* diagnosis hero */}
       <div className="corners relative rounded-[10px] border border-line-strong bg-surface p-6 sm:p-8">
@@ -138,28 +155,32 @@ export function Results({ result, extraction }: { result: ClassifyResult; extrac
         <span><strong>Investigational output.</strong> An automated application of published WHO criteria for decision support, not a diagnosis. A qualified hematologist must confirm all findings.</span>
       </div>
     </SourceProvider>
+    </PrintContext.Provider>
   )
 }
 
 /* ------------------------------------------------------------ disease card */
 function DiseaseCard({ a }: { a: DiseaseAssessment }) {
-  const [open, setOpen] = useState(a.verdict !== 'not')
+  const [openState, setOpen] = useState(a.verdict !== 'not')
+  const printing = useContext(PrintContext)
+  const open = openState || printing
+  const panelId = `disease-panel-${a.disease}`
   const status = VERDICT_STATUS[a.verdict]
   const met = a.criteria.filter((c) => c.status === 'met')
   const notMet = a.criteria.filter((c) => c.status === 'not_met')
   const unavailable = a.criteria.filter((c) => c.status === 'unavailable')
   return (
     <div className={cx('rounded-[10px] border bg-surface', a.verdict === 'not' ? 'border-line' : 'border-line-strong')}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls={panelId}
         className="flex w-full flex-wrap items-center gap-2.5 px-5 py-4 text-left">
-        <ChevronRight size={15} className={cx('shrink-0 text-faint transition-transform', open && 'rotate-90')} />
+        <ChevronRight aria-hidden size={15} className={cx('shrink-0 text-faint transition-transform', open && 'rotate-90')} />
         <span className="text-[15px] font-semibold">{a.name}</span>
         <span className="font-mono text-[11px] text-faint">{a.disease}</span>
         <div className="flex-1" />
         <CategoricalChip status={status}>{VERDICT_WORD[a.verdict]}</CategoricalChip>
       </button>
       {open && (
-        <div className="border-t border-line px-5 py-4">
+        <div id={panelId} className="border-t border-line px-5 py-4">
           <ul>
             {a.criteria.map((c, i) => <CriterionRow key={i} c={c} />)}
           </ul>
@@ -183,9 +204,10 @@ function DiseaseCard({ a }: { a: DiseaseAssessment }) {
 }
 
 function critIcon(s: CriterionStatus) {
-  if (s === 'met') return <Check size={13} />
-  if (s === 'not_met') return <X size={13} />
-  return <CircleHelp size={13} />
+  // decorative: the wrapping span carries role="img" + the accessible name
+  if (s === 'met') return <Check aria-hidden size={13} />
+  if (s === 'not_met') return <X aria-hidden size={13} />
+  return <CircleHelp aria-hidden size={13} />
 }
 function critWord(s: CriterionStatus) {
   return s === 'met' ? 'Met' : s === 'not_met' ? 'Not met' : 'Unavailable or pending'
@@ -234,7 +256,10 @@ function PrognosisSection({ result, toolChipN }: { result: ClassifyResult; toolC
 }
 
 function RiskCard({ tool, primary, chipN }: { tool: PrognosisTool; primary: boolean; chipN: number }) {
-  const [open, setOpen] = useState(primary)
+  const [openState, setOpen] = useState(primary)
+  const printing = useContext(PrintContext)
+  const open = openState || printing
+  const panelId = `risk-panel-${tool.key}`
   const established = tool.status === 'established'
   const status = established && tool.tier ? (TIER_STATUS[tool.tier] || 'neutral') : 'neutral'
   return (
@@ -258,12 +283,12 @@ function RiskCard({ tool, primary, chipN }: { tool: PrognosisTool; primary: bool
             <span>Required but unavailable: <strong>{tool.requiredMissing.join(', ')}</strong>. No definitive category is assigned.</span>
           </div>
         )}
-        <button type="button" onClick={() => setOpen((o) => !o)} className="mt-2 inline-flex items-center gap-1 font-mono text-[12px] text-accent" aria-expanded={open}>
-          <ChevronRight size={13} className={cx('transition-transform', open && 'rotate-90')} />
+        <button type="button" onClick={() => setOpen((o) => !o)} className="mt-2 inline-flex items-center gap-1 font-mono text-[12px] text-accent" aria-expanded={open} aria-controls={panelId}>
+          <ChevronRight aria-hidden size={13} className={cx('transition-transform', open && 'rotate-90')} />
           Scoring &amp; reference
         </button>
         {open && (
-          <div className="mt-3">
+          <div id={panelId} className="mt-3">
             <table className="w-full text-[12.5px]">
               <tbody>
                 {tool.points.map((p, i) => (

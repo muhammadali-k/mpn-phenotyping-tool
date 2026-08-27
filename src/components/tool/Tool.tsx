@@ -245,7 +245,7 @@ export function Tool() {
             />
           )}
             {step === 3 && result && (
-              <StepResults result={result} extracted={extracted} lastExtract={lastExtract} onBack={() => setStep(2)} onCopy={() => flash('Summary copied')} />
+              <StepResults result={result} extracted={extracted} lastExtract={lastExtract} onBack={() => setStep(2)} onCopy={(ok) => flash(ok ? 'Summary copied' : 'Copy failed in this browser; use Export JSON')} />
             )}
           </div>
         </div>
@@ -569,6 +569,9 @@ function MolecularPanel({ form, setField, sourceOf, reviewOf }: {
             {KARYOTYPE_KEYS.map((k) => (
               <VarField key={k} field={FIELD_BY_KEY[k]} value={form[k]} source={sourceOf(k)} onChange={(v) => setField(k, v)} review={reviewOf(k)} />
             ))}
+            {form.karyotype_risk === undefined && (
+              <StatusLine tone="muted">Karyotype risk is the scored field: choose favorable, unfavorable, or very high so DIPSS+ and MIPSS70+ v2.0 can be established. Without it they report "category not established".</StatusLine>
+            )}
           </div>
         )}
       </div>
@@ -593,26 +596,29 @@ function MolecularPanel({ form, setField, sourceOf, reviewOf }: {
 /* ============================================================ Step 3 */
 function StepResults({ result, extracted, lastExtract, onBack, onCopy }: {
   result: ClassifyResult; extracted: Extraction; lastExtract: { provider: string; model: string } | null
-  onBack: () => void; onCopy: () => void
+  onBack: () => void; onCopy: (ok: boolean) => void
 }) {
   const summary = useMemo(() => buildSummary(result), [result])
 
   const copy = async () => {
+    let ok = false
     try {
-      if (navigator.clipboard) await navigator.clipboard.writeText(summary)
+      if (navigator.clipboard) { await navigator.clipboard.writeText(summary); ok = true }
       else throw new Error('no clipboard')
     } catch {
       const ta = document.createElement('textarea'); ta.value = summary; document.body.appendChild(ta); ta.select()
-      try { document.execCommand('copy') } catch { /* ignore */ }
+      try { ok = document.execCommand('copy') } catch { ok = false }
       ta.remove()
     }
-    onCopy()
+    // only report success when the text actually reached the clipboard
+    onCopy(ok)
   }
 
   const exportJSON = () => {
     const payload = {
       diagnosis: result.diagnosis, prognosis: result.prognosis, resolved: result.merged,
-      extraction: { provider: lastExtract, impression: extracted.impression, rationale: extracted.rationale },
+      // full per-field provenance (value, status, snippet, source) and review flags travel with the export
+      extraction: { provider: lastExtract, impression: extracted.impression, rationale: extracted.rationale, fields: extracted.fields, needsReview: extracted.needsReview },
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -623,7 +629,7 @@ function StepResults({ result, extracted, lastExtract, onBack, onCopy }: {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-2.5">
+      <div className="print-hide mb-4 flex flex-wrap items-center gap-2.5">
         <Button variant="ghost" size="sm" onClick={onBack}>← Edit variables</Button>
         <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={copy}><Copy aria-hidden size={14} /> Copy summary</Button>
@@ -647,7 +653,7 @@ function buildSummary(r: ClassifyResult): string {
   dx.assessments.forEach((a) => {
     L.push(`  ${a.name} (${a.disease}): ${a.label}`)
     a.criteria.forEach((c) => {
-      const m = c.status === 'met' ? '[x]' : c.status === 'not_met' ? '[ ]' : '[?]'
+      const m = c.status === 'met' ? '[met]' : c.status === 'not_met' ? '[not met]' : '[unavailable]'
       L.push(`    ${m} (${c.tier}) ${c.label}${c.detail ? '  · ' + c.detail : ''}`)
     })
     if (a.verdict === 'suspicious' && a.outstanding.length) {

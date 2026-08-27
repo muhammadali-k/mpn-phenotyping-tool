@@ -544,6 +544,13 @@ suite('Audit regressions: exclusions, guards, extraction consistency', () => {
     assert(!('prior_thrombosis' in ext.variables), 'prior_thrombosis=false dropped'); eq(ext.variables.thrombosis_type, 'venous')
     ;['triple_negative', 'hmr_tested', 'splenomegaly', 'prior_thrombosis'].forEach((k) => includes(ext.needsReview, k))
   })
+  test('discordant Hb / Hct raises a caveat; a not-palpable spleen with a measured size is a conflict', () => {
+    const dx = diagnose({ sex: 'male', hemoglobin: 17, hematocrit: 32 })
+    assert(dx.caveats.some((c) => c.includes('inconsistent with each other')), 'Hb/Hct caveat')
+    const mf = diagnose({ splenomegaly: false, spleen_cm: 6, reticulin_fibrosis_grade: '2', megakaryocyte_pattern: 'atypical_clustered', jak2_v617f: 'positive', bcr_abl1: 'negative' })
+    eq(crit(mf, 'MF', 'splenomegaly').status, 'unavailable', 'conflict is not scored as met')
+    assert(mf.caveats.some((c) => c.includes('not palpable')), 'spleen conflict caveat')
+  })
   test('caveats: normal red cell mass / high EPO with a PV profile; transfusion dependence with normal Hb', () => {
     const dx = diagnose({ sex: 'male', hemoglobin: 19, jak2_v617f: 'positive', megakaryocyte_pattern: 'pleomorphic', red_cell_mass: 'normal', epo: 'high' })
     assert(dx.caveats.some((c) => c.includes('argues against polycythemia vera')), 'RCM/EPO caveat')
