@@ -7,7 +7,11 @@ import {
 } from '@/lib/engine'
 import { useApp } from '@/lib/store'
 import { Button, Eyebrow, StepMarker } from '@/components/ui/primitives'
-import { VarField } from './fields'
+import { GateRow, StatusLine, VarField } from './fields'
+import {
+  anyMolecularTestOpen, applyChange, DRIVER_KEYS, hmrList, isUiKey, isVisible, KARYOTYPE_KEYS, reconcile,
+  TRIPLE_KEYS, UI_DRIVER_TESTED, UI_KARYOTYPE_TESTED, type FormState,
+} from './formSchema'
 import { DeidPanel } from './DeidPanel'
 import { EntryModeModal, type EntryMode } from './EntryModeModal'
 import { Results } from './Results'
@@ -91,7 +95,8 @@ export function Tool() {
       const k = field.key
       f[k] = base[k] !== undefined ? base[k] : ext.variables[k]
     })
-    setForm(f)
+    // enforce consistency + derive gates from whatever evidence was extracted
+    setForm(reconcile(f))
   }
 
   async function runExtraction() {
@@ -143,6 +148,7 @@ export function Tool() {
     const variables: Variables = {}
     const sources: Record<string, SourceTag> = {}
     Object.keys(form).forEach((k) => {
+      if (isUiKey(k)) return // UI-only gate state never reaches the engine
       const v = form[k]
       if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) return
       variables[k] = v
@@ -375,7 +381,8 @@ function StepVariables({ form, setForm, extracted, onFile, lastExtract, onBack, 
   extracted: Extraction; onFile: Variables; lastExtract: { provider: string; model: string } | null
   onBack: () => void; onRun: () => void
 }) {
-  const setField = (k: string, v: VarValue | undefined) => setForm({ ...form, [k]: v })
+  // every edit goes through the schema so dependent fields stay consistent
+  const setField = (k: string, v: VarValue | undefined) => setForm(applyChange(form, k, v))
   const sourceOf = (k: string): SourceTag | null => {
     const v = form[k]
     if (v === undefined) return null
@@ -408,9 +415,11 @@ function StepVariables({ form, setForm, extracted, onFile, lastExtract, onBack, 
           <div key={group} className="rounded-[10px] border border-line bg-surface">
             <div className="border-b border-line px-4 py-3"><h4 className="text-[14px] font-semibold">{GROUP_LABEL[group]}</h4></div>
             <div className="space-y-4 px-4 py-4">
-              {FIELDS.filter((f) => f.group === group).map((f) => (
-                <VarField key={f.key} field={f} value={form[f.key]} source={sourceOf(f.key)} onChange={(v) => setField(f.key, v)} />
-              ))}
+              {group === 'molecular'
+                ? <MolecularPanel form={form} setField={setField} sourceOf={sourceOf} />
+                : FIELDS.filter((f) => f.group === group && isVisible(f.key, form)).map((f) => (
+                    <VarField key={f.key} field={f} value={form[f.key]} source={sourceOf(f.key)} onChange={(v) => setField(f.key, v)} />
+                  ))}
             </div>
           </div>
         ))}
@@ -421,6 +430,102 @@ function StepVariables({ form, setForm, extracted, onFile, lastExtract, onBack, 
         <div className="flex-1" />
         <Button onClick={onRun}>Run diagnosis &amp; prognosis <ArrowRight aria-hidden size={15} /></Button>
       </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------ Molecular & cytogenetics
+   Guided entry: each test is a yes / no / unknown gate; its result fields appear
+   only once the test is marked performed. Triple-negative status is derived from
+   the driver results rather than asked separately, so it can never contradict them. */
+function MolecularPanel({ form, setField, sourceOf }: {
+  form: FormState
+  setField: (k: string, v: VarValue | undefined) => void
+  sourceOf: (k: string) => SourceTag | null
+}) {
+  const driverOpen = form[UI_DRIVER_TESTED] === true
+  const hmrOpen = form.hmr_tested === true
+  const karyoOpen = form[UI_KARYOTYPE_TESTED] === true
+  const anyOpen = anyMolecularTestOpen(form)
+  const showClonal = anyOpen || form.clonal_marker_present !== undefined
+  const hmr = hmrList(form)
+
+  const driverStatus = (() => {
+    if (!driverOpen) return null
+    const pos: string[] = []
+    if (form.jak2_v617f === 'positive') pos.push('JAK2 V617F')
+    if (form.jak2_exon12 === 'positive') pos.push('JAK2 exon 12')
+    if (form.calr && form.calr !== 'negative') pos.push(`CALR ${String(form.calr).replace(/_/g, ' ')}`)
+    if (form.mpl === 'positive') pos.push('MPL')
+    if (form.bcr_abl1 === 'positive') pos.push('BCR-ABL1')
+    if (pos.length) return { tone: 'info' as const, text: `Driver result: ${pos.join(', ')} positive.` }
+    if (form.triple_negative === true) return { tone: 'info' as const, text: 'Triple negative: JAK2 V617F, CALR and MPL all negative.' }
+    const untested = TRIPLE_KEYS.filter((k) => form[k] === undefined).map((k) => FIELD_BY_KEY[k].label)
+    if (untested.length) return { tone: 'muted' as const, text: `Not yet entered: ${untested.join(', ')}. Leave blank if not included in the panel; a blank result is treated as untested, not negative.` }
+    return null
+  })()
+
+  const withLabel = (key: string, label: string) => ({ ...FIELD_BY_KEY[key], label })
+  const indent = 'mt-3 space-y-4 border-l-2 border-line-strong pl-4'
+
+  return (
+    <div className="space-y-5">
+      {/* 1. driver mutations */}
+      <div>
+        <GateRow id="gate-driver" label="Driver mutation testing performed?" hint="JAK2 V617F, JAK2 exon 12, CALR, MPL, BCR-ABL1"
+          value={form[UI_DRIVER_TESTED]} onChange={(v) => setField(UI_DRIVER_TESTED, v)} />
+        {driverOpen && (
+          <div className={indent}>
+            {DRIVER_KEYS.map((k) => (
+              <VarField key={k} field={FIELD_BY_KEY[k]} value={form[k]} source={sourceOf(k)} onChange={(v) => setField(k, v)} />
+            ))}
+            {driverStatus && <StatusLine tone={driverStatus.tone}>{driverStatus.text}</StatusLine>}
+          </div>
+        )}
+      </div>
+
+      {/* 2. extended NGS / HMR panel */}
+      <div className="border-t border-line pt-5">
+        <GateRow id="gate-hmr" label="Extended NGS / high-molecular-risk (HMR) panel performed?" hint="ASXL1, EZH2, SRSF2, IDH1, IDH2, U2AF1 Q157"
+          value={form.hmr_tested} onChange={(v) => setField('hmr_tested', v)} />
+        {hmrOpen && (
+          <div className={indent}>
+            <VarField field={withLabel('hmr_mutations', 'HMR mutations detected (select all that apply)')} value={form.hmr_mutations} source={sourceOf('hmr_mutations')} onChange={(v) => setField('hmr_mutations', v)} />
+            <StatusLine tone={hmr.length ? 'info' : 'muted'}>
+              {hmr.length
+                ? `${hmr.length} HMR mutation${hmr.length === 1 ? '' : 's'} recorded: ${hmr.join(', ')}.`
+                : 'No mutations selected: recorded as HMR-negative (panel performed, none detected).'}
+            </StatusLine>
+          </div>
+        )}
+      </div>
+
+      {/* 3. cytogenetics */}
+      <div className="border-t border-line pt-5">
+        <GateRow id="gate-karyo" label="Cytogenetics / karyotype performed?"
+          value={form[UI_KARYOTYPE_TESTED]} onChange={(v) => setField(UI_KARYOTYPE_TESTED, v)} />
+        {karyoOpen && (
+          <div className={indent}>
+            {KARYOTYPE_KEYS.map((k) => (
+              <VarField key={k} field={FIELD_BY_KEY[k]} value={form[k]} source={sourceOf(k)} onChange={(v) => setField(k, v)} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 4. other clonal evidence: only knowable once some test is open */}
+      {showClonal && (
+        <div className="border-t border-line pt-5">
+          <VarField field={withLabel('clonal_marker_present', 'Other clonal marker present (non-driver)')} value={form.clonal_marker_present} source={sourceOf('clonal_marker_present')} onChange={(v) => setField('clonal_marker_present', v)} />
+          <p className="mt-1.5 text-[12px] text-faint">Any additional clonal abnormality on sequencing or cytogenetics.</p>
+        </div>
+      )}
+
+      {!anyOpen && (
+        <p className="text-[12.5px] leading-relaxed text-faint">
+          Answer the testing questions above to enter results. Tests marked no or unknown are left blank and are never counted as negative.
+        </p>
+      )}
     </div>
   )
 }

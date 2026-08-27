@@ -92,8 +92,42 @@ export function VarField({ field, value, source, onChange }: FieldProps) {
   )
 }
 
+/* ---------------------------------------------------------------- GateRow
+   A yes / no / unknown question that guards the detail fields beneath it
+   ("Was this test performed?"). Details render only when the answer is yes;
+   answering no or unknown clears them (see formSchema.applyChange). */
+export function GateRow({ id, label, hint, value, onChange }: {
+  id: string; label: string; hint?: string; value: VarValue | undefined; onChange: (v: VarValue | undefined) => void
+}) {
+  return (
+    <div role="group" aria-labelledby={id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <span id={id} className="block min-w-0">
+        <span className="block text-[13.5px] font-semibold leading-snug text-ink">{label}</span>
+        {hint && <span className="mt-0.5 block text-[12px] leading-snug text-faint">{hint}</span>}
+      </span>
+      <div className="w-full shrink-0 sm:w-[236px]">
+        <TriState value={value as boolean | undefined} onChange={onChange} labelId={id} />
+      </div>
+    </div>
+  )
+}
+
+/* small inline status / guidance line under a group of fields */
+export function StatusLine({ tone = 'muted', children }: { tone?: 'muted' | 'info' | 'warn'; children: React.ReactNode }) {
+  return (
+    <div className={cx(
+      'rounded-[8px] px-3 py-2 text-[12.5px] leading-relaxed',
+      tone === 'info' && 'bg-[color-mix(in_srgb,var(--c-info)_9%,transparent)] text-info',
+      tone === 'warn' && 'bg-[color-mix(in_srgb,var(--c-warn)_10%,transparent)] text-warn',
+      tone === 'muted' && 'bg-surface2 text-muted',
+    )}>
+      {children}
+    </div>
+  )
+}
+
 function TriState({ value, onChange, labelId }: { value: boolean | undefined; onChange: (v: VarValue | undefined) => void; labelId: string }) {
-  const opts: [string, boolean | undefined][] = [['yes', true], ['no', false], ['–', undefined]]
+  const opts: [string, boolean | undefined][] = [['Yes', true], ['No', false], ['Unknown', undefined]]
   return (
     <div className="flex h-10 w-full overflow-hidden rounded-[6px] border border-line-strong">
       {opts.map(([lbl, val], i) => {
@@ -106,7 +140,11 @@ function TriState({ value, onChange, labelId }: { value: boolean | undefined; on
             className={cx(
               'flex flex-1 items-center justify-center text-[13px] transition-colors',
               i < 2 && 'border-r border-line',
-              on ? 'bg-accent text-on-accent' : 'bg-surface2 text-muted hover:text-ink',
+              // a chosen yes / no reads as a decision (accent); the default "unknown"
+              // stays neutral so an untouched form does not look like a wall of choices
+              on && val !== undefined && 'bg-accent font-medium text-on-accent',
+              on && val === undefined && 'bg-surface font-medium text-ink',
+              !on && 'bg-surface2 text-muted hover:text-ink',
             )}
           >
             {lbl}
