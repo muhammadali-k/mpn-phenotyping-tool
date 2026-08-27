@@ -106,8 +106,8 @@ export function Tool() {
     const f: FormState = {}
     FIELDS.forEach((field) => {
       const k = field.key
-      // a value the user typed by hand survives a (re-)extraction
-      if (userEdited.current.has(k) && form[k] !== undefined) { f[k] = form[k]; return }
+      // a value the user typed by hand, or deliberately cleared, survives a (re-)extraction
+      if (userEdited.current.has(k)) { f[k] = form[k]; return }
       f[k] = base[k] !== undefined ? base[k] : ext.variables[k]
     })
     // enforce consistency + derive gates from whatever evidence was extracted

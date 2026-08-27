@@ -441,7 +441,8 @@ suite('MF prognosis — no HMR imputation, established happy-path', () => {
     const p = prognose(diagnose(v), v)
     eq(p.tools.mipss70v2.status, 'established')
     eq(p.tools.mipss70v2.category, 'Very high risk')
-    eq(p.primaryKey, 'mipss70v2')
+    // the example patient is 71: above transplant age, DIPSS+ leads and MIPSS70+ v2 is kept for reference
+    eq(p.primaryKey, 'dipss_plus')
   })
 })
 
@@ -550,6 +551,17 @@ suite('Audit regressions: exclusions, guards, extraction consistency', () => {
     const mf = diagnose({ splenomegaly: false, spleen_cm: 6, reticulin_fibrosis_grade: '2', megakaryocyte_pattern: 'atypical_clustered', jak2_v617f: 'positive', bcr_abl1: 'negative' })
     eq(crit(mf, 'MF', 'splenomegaly').status, 'unavailable', 'conflict is not scored as met')
     assert(mf.caveats.some((c) => c.includes('not palpable')), 'spleen conflict caveat')
+  })
+  test('MIPSS70 models are not primary above transplant age; DIPSS+ leads and the note says so', () => {
+    const older = exampleVars('mf') // the example is 71
+    const pO = prognose(diagnose(older), older)
+    eq(pO.primaryKey, 'dipss_plus')
+    eq(pO.tools.mipss70v2?.status, 'established', 'still computed for reference')
+    assert((pO.tools.mipss70v2?.note || '').includes('shown for reference at age 71'), 'qualifier shown')
+    const younger: Variables = { ...older, age: 65 }
+    const pYo = prognose(diagnose(younger), younger)
+    eq(pYo.primaryKey, 'mipss70v2')
+    assert(!(pYo.tools.mipss70v2?.note || '').includes('shown for reference'), 'no qualifier at 65')
   })
   test('caveats: normal red cell mass / high EPO with a PV profile; transfusion dependence with normal Hb', () => {
     const dx = diagnose({ sex: 'male', hemoglobin: 19, jak2_v617f: 'positive', megakaryocyte_pattern: 'pleomorphic', red_cell_mass: 'normal', epo: 'high' })

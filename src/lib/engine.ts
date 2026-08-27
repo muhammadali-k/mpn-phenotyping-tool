@@ -1126,8 +1126,19 @@ export function prognose(dx: Diagnosis, v: Variables): Prognosis {
       evidence: '10-yr survival: very low ≈92%, low ≈56%, intermediate ≈37%, high ≈13%, very high ≈7%.', citation: 'Tefferi 2018',
     }
 
-    // Primary = the most comprehensive model that is fully established.
-    const preference = ['mipss70v2', 'mipss70', 'dipss_plus', 'dipss']
+    // Primary = the most comprehensive model that is fully established. The
+    // MIPSS70 family was derived and validated in transplant-age patients
+    // (70 or younger); above that age DIPSS+ / DIPSS lead and the MIPSS70
+    // models are kept for reference with an explicit qualifier.
+    const ageP = num(v.age)
+    const transplantAge = ageP === null || ageP <= 70
+    const preference = transplantAge ? ['mipss70v2', 'mipss70', 'dipss_plus', 'dipss'] : ['dipss_plus', 'dipss', 'mipss70v2', 'mipss70']
+    if (!transplantAge) {
+      ;['mipss70', 'mipss70v2'].forEach((k) => {
+        const t = out.tools[k]
+        if (t) t.note += ' Developed and validated in transplant-age patients (70 or younger); shown for reference at age ' + ageP + '.'
+      })
+    }
     out.primaryKey = preference.find((k) => out.tools[k].status === 'established') || null
     out.order = preference
     if (!out.primaryKey) {

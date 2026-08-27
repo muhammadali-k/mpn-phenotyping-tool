@@ -40,6 +40,13 @@ Light and a designed dark scale are both included.
 - **Tailwind CSS v4** (CSS-first `@theme`, light + engineered dark scale)
 - **Framer Motion** (restrained entrances), **lucide-react** (icons), **Radix UI** (accessible dialog)
 - All clinical logic in `src/lib/engine.ts`; de-identification in `src/lib/deid.ts`
+- Structured-form rules in `src/components/tool/formSchema.ts`: molecular and cytogenetic
+  results sit behind "was this test performed?" gates, triple-negative status is derived
+  from the driver results rather than asked, dependent fields (spleen size, thrombosis type,
+  LDH upper limit) appear only once their parent answer allows, and plausibility ranges with
+  unit hints block a run on impossible values (g/L for g/dL, a fraction for a percent,
+  cells/µL for ×10⁹/L). Contradictory states such as "HMR mutations present" with
+  "panel not performed" cannot be submitted.
 
 ## Develop
 
