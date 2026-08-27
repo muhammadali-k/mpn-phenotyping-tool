@@ -29,6 +29,7 @@ export function Tool() {
   const { config, setConfig, setKeyModalOpen } = useApp()
   const [step, setStepRaw] = useState<Step>(1)
   const stepRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
   const firstRender = useRef(true)
   const setStep = (s: Step) => setStepRaw(s)
   const [note, setNote] = useState('')
@@ -64,10 +65,17 @@ export function Tool() {
   }
   // clear pending toast timer on unmount
   useEffect(() => () => window.clearTimeout(toastTimer.current), [])
-  // move focus to the new step's container on transition (skip initial mount)
+  // on every step transition: focus the new step for screen readers, and bring the
+  // TOP of the tool frame into view (under the sticky header) so a step always
+  // starts at its beginning rather than wherever the focus call happened to land
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return }
-    stepRef.current?.focus()
+    stepRef.current?.focus({ preventScroll: true })
+    const top = frameRef.current?.getBoundingClientRect().top
+    if (typeof top === 'number') {
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      window.scrollBy({ top: top - 84, behavior: reduce ? 'auto' : 'smooth' })
+    }
   }, [step])
   useEffect(() => {
     if (step === 1 && entryMode === null) setEntryModalOpen(true)
@@ -203,7 +211,7 @@ export function Tool() {
   const canGo = (i: number) => !busy && (i + 1 <= step || (!!result && (i === 1 || i === 2)))
 
   return (
-    <div className="app-frame corners relative rounded-[14px] bg-surface">
+    <div ref={frameRef} className="app-frame corners relative rounded-[14px] bg-surface">
       <span className="cm tl" aria-hidden /><span className="cm tr" aria-hidden />
       <span className="cm bl" aria-hidden /><span className="cm br" aria-hidden />
 
@@ -221,10 +229,13 @@ export function Tool() {
             </button>
           ))}
           <div className="flex-1" />
-          <button type="button" onClick={() => setKeyModalOpen(true)} className="inline-flex items-center gap-2 font-mono text-[11.5px] text-muted transition-colors hover:text-ink">
-            <span className={cx('inline-block h-[7px] w-[7px] rounded-full', hasCredential ? 'bg-success' : 'bg-faint')} aria-hidden />
-            {hasCredential ? PROVIDERS[config.provider].label : 'set up model'}
-          </button>
+          {/* the model is irrelevant to manual entry: show it only on the AI path */}
+          {entryMode !== 'manual' && (
+            <button type="button" onClick={() => setKeyModalOpen(true)} className="inline-flex items-center gap-2 font-mono text-[11.5px] text-muted transition-colors hover:text-ink">
+              <span className={cx('inline-block h-[7px] w-[7px] rounded-full', hasCredential ? 'bg-success' : 'bg-faint')} aria-hidden />
+              {hasCredential ? PROVIDERS[config.provider].label : 'set up model'}
+            </button>
+          )}
         </nav>
 
         <div className="scroll p-5 sm:p-6 md:p-7">

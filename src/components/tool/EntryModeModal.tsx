@@ -163,6 +163,7 @@ export function EntryModeModal({
         </label>
       )}
 
+      {mode === 'llm' && (
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-4">
         <div className="min-w-0 flex-1">
           <Eyebrow tone="faint">Current model</Eyebrow>
@@ -179,6 +180,7 @@ export function EntryModeModal({
           Advanced: choose model / use your own key
         </button>
       </div>
+      )}
     </Modal>
   )
 }
