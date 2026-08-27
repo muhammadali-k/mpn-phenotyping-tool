@@ -21,6 +21,8 @@ export interface EntryModeModalProps {
   onChoose: (mode: EntryMode) => void
   onOpenProviderSettings: () => void
   onUsePuter: () => void
+  /* true until a mode has been chosen once: the dialog cannot be dismissed */
+  required: boolean
 }
 
 export function EntryModeModal({
@@ -32,6 +34,7 @@ export function EntryModeModal({
   onChoose,
   onOpenProviderSettings,
   onUsePuter,
+  required,
 }: EntryModeModalProps) {
   const [mode, setMode] = useState<EntryMode>('llm')
   const [acknowledged, setAcknowledged] = useState(false)
@@ -59,8 +62,9 @@ export function EntryModeModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
+      dismissable={!required}
       title="Choose how to enter data"
-      description="Start with AI-assisted extraction from de-identified text, or go directly to the structured form."
+      description="Start with AI-assisted extraction from de-identified text, or go directly to the structured form. A choice is required before the tool can be used."
       footer={
         <Button onClick={choose} disabled={!canContinue}>
           Continue

@@ -205,7 +205,7 @@ const FIELDS_RAW: Array<[FieldGroup, string, string, FieldType, string[] | null,
   ['pathology', 'decreased_erythropoiesis', 'Decreased erythropoiesis', 'bool', null, 'llm', ''],
   ['pathology', 'leukoerythroblastosis', 'Leukoerythroblastic blood film', 'bool', null, 'llm', ''],
   ['pathology', 'reactive_cause_excluded', 'Reactive cause of fibrosis excluded', 'bool', null, 'either', ''],
-  ['pathology', 'red_cell_mass', 'Red cell mass', 'enum', ['increased', 'normal'], 'either', ''],
+  ['labs', 'red_cell_mass', 'Red cell mass (measured)', 'enum', ['increased', 'normal'], 'either', ''],
 ]
 
 export const FIELDS: Field[] = FIELDS_RAW.map((f) => ({

@@ -72,6 +72,12 @@ export function Tool() {
   useEffect(() => {
     if (step === 1 && entryMode === null) setEntryModalOpen(true)
   }, [entryMode, step])
+  // the cloud-sharing acknowledgment is tied to the provider it was given for:
+  // any provider change (cloud ↔ cloud or on-device ↔ cloud) requires it again
+  const ackProvider = useRef(config.provider)
+  useEffect(() => {
+    if (ackProvider.current !== config.provider) { ackProvider.current = config.provider; setLlmAcknowledged(false) }
+  }, [config.provider])
 
   const hasText = (note + path).trim().length > 0
   const keyless = providerIsKeyless(config.provider)
@@ -235,7 +241,7 @@ export function Tool() {
               onExtract={runExtraction} onChangeEntryMode={() => setEntryModalOpen(true)}
               onOpenKeyModal={() => setKeyModalOpen(true)}
               onApplyRedaction={(n, p) => { setNote(n); setPath(p) }}
-              needsAck={!ackOk} onAcknowledge={setLlmAcknowledged}
+              cloudProvider={!onDevice} acknowledged={llmAcknowledged} onAcknowledge={setLlmAcknowledged}
             />
           )}
           {step === 2 && (
@@ -267,6 +273,7 @@ export function Tool() {
         onChoose={chooseEntryMode}
         onOpenProviderSettings={() => setKeyModalOpen(true)}
         onUsePuter={() => setConfig({ provider: 'puter', key: '', model: PROVIDERS.puter.defaultModel })}
+        required={entryMode === null}
       />
     </div>
   )
@@ -281,7 +288,7 @@ function StepReports(props: {
   providerName: string; getKeyUrl?: string
   progressText: string
   onExtract: () => void; onChangeEntryMode: () => void; onOpenKeyModal: () => void; onApplyRedaction: (n: string, p: string) => void
-  needsAck: boolean; onAcknowledge: (b: boolean) => void
+  cloudProvider: boolean; acknowledged: boolean; onAcknowledge: (b: boolean) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const ta = 'scroll min-h-[130px] w-full resize-y rounded-[6px] border border-line-strong bg-surface2 px-3.5 py-3 text-[14px] leading-[1.6] outline-none transition-colors focus:border-focus focus:bg-surface'
@@ -327,15 +334,15 @@ function StepReports(props: {
           <span className="text-[13px] text-muted"><strong className="text-ink">I confirm this text is de-identified.</strong> It contains no names, MRNs, dates of birth, contact details or other direct identifiers, and I am authorized to process it with a third-party model.</span>
         </label>
 
-        {/* the cloud-sharing acknowledgment is re-asked here whenever the current
-            provider needs it and it has not been given (for example after switching
-            from an on-device model to a cloud provider), so there is never a dead end */}
-        {props.needsAck && (
-          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-[8px] border border-line-strong bg-surface px-4 py-3">
-            <input type="checkbox" checked={false} onChange={(e) => props.onAcknowledge(e.target.checked)} className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-accent" />
+        {/* the cloud-sharing acknowledgment always sits next to the action it
+            governs whenever a cloud provider is selected; it is never defaulted,
+            resets on any provider change, and is required before extraction */}
+        {props.cloudProvider && (
+          <label className={cx('mt-3 flex cursor-pointer items-start gap-3 rounded-[8px] border px-4 py-3', props.acknowledged ? 'border-line bg-surface' : 'border-warn/50 bg-[color-mix(in_srgb,var(--c-warn)_7%,transparent)]')}>
+            <input type="checkbox" checked={props.acknowledged} onChange={(e) => props.onAcknowledge(e.target.checked)} className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-accent" />
             <span className="text-[13px] leading-relaxed text-muted">
-              <strong className="text-ink">I understand this text will be shared with a third-party AI service.</strong>{' '}
-              {props.providerName} is an external provider outside our control, not firewall-protected, and not covered by a HIPAA Business Associate Agreement. I will use de-identified or synthetic text only.
+              <strong className="text-ink">I understand this text will be shared with a third-party AI service ({props.providerName}).</strong>{' '}
+              It is an external provider outside our control, not firewall-protected, and not covered by a HIPAA Business Associate Agreement. I will use de-identified or synthetic text only. Required before extraction; asked again if the provider changes.
             </span>
           </label>
         )}
