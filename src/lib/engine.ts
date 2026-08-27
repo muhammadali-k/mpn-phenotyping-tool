@@ -174,6 +174,7 @@ const FIELDS_RAW: Array<[FieldGroup, string, string, FieldType, string[] | null,
   ['demographics', 'thrombosis_type', 'Thrombosis type', 'enum', ['arterial', 'venous', 'both'], 'either', ''],
   ['demographics', 'cv_risk_factors', 'Cardiovascular risk factors', 'bool', null, 'either', ''],
   ['demographics', 'transfusion_dependent', 'Transfusion dependent', 'bool', null, 'either', ''],
+  ['demographics', 'reactive_thrombocytosis_excluded', 'Reactive thrombocytosis excluded', 'bool', null, 'either', ''],
 
   ['labs', 'hemoglobin', 'Hemoglobin', 'number', null, 'struct', 'g/dL'],
   ['labs', 'hematocrit', 'Hematocrit', 'number', null, 'struct', '%'],
@@ -304,8 +305,13 @@ const ABSENCE_TOKENS = new Set([
 ])
 function isAbsenceToken(x: unknown): boolean {
   if (x === null || x === undefined) return true
+  if (Array.isArray(x)) return x.length === 0
   return ABSENCE_TOKENS.has(String(x).toLowerCase().trim())
 }
+
+// Canonical form for list options (gene names): case- and punctuation-insensitive,
+// so "u2af1 q157" and "U2AF1Q157" both resolve to the schema option.
+const canon = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 // ---------------------------------------------------------------- stage 2
 // Coerce a raw model value for a field. Returns null when the value is absent,
@@ -320,8 +326,15 @@ function coerceValue(f: Field, raw: unknown): VarValue | null {
     return null // anything else (incl. absence tokens handled above) is not a documented boolean
   }
   if (f.type === 'list') {
-    let arr = Array.isArray(raw) ? (raw as string[]) : String(raw).split(/[,;]+/).map((s) => s.trim())
+    let arr = (Array.isArray(raw) ? (raw as unknown[]) : String(raw).split(/[,;]+/)).map((s) => String(s).trim())
     arr = arr.filter((s) => s && !isAbsenceToken(s))
+    // Only schema options may enter a scored list: an unlisted gene (e.g. TET2)
+    // must never drive HMR-positive scoring. Unknown entries are dropped here and
+    // flagged for review by normalizeExtraction.
+    if (f.options) {
+      const byCanon = new Map(f.options.map((o) => [canon(o), o]))
+      arr = Array.from(new Set(arr.map((s) => byCanon.get(canon(s))).filter((o): o is string => !!o)))
+    }
     return arr.length ? arr : null
   }
   if (f.type === 'enum') {
@@ -368,6 +381,8 @@ export function normalizeExtraction(raw: unknown, sourceText?: string): Extracti
   out.impression = typeof r.impression === 'string' ? r.impression : ''
 
   const haystack = (sourceText || '').toLowerCase().replace(/\s+/g, ' ')
+  let hmrPanelNegative = false
+  const listDropped: string[] = []
 
   Object.keys(FIELD_BY_KEY).forEach((key) => {
     const f = FIELD_BY_KEY[key]
@@ -395,11 +410,23 @@ export function normalizeExtraction(raw: unknown, sourceText?: string): Extracti
       if (needle.length > 3 && !haystack.includes(needle)) grounded = false
     }
 
+    // The model may only attribute a value to the note or the pathology report;
+    // "structured" is reserved for on-file data and is assigned in the merge step.
     const sourceTag: SourceTag = (() => {
       const s = srcs[key] ?? (metaRaw ? metaRaw.sourceTag : undefined)
-      if (s === 'pathology' || s === 'structured' || s === 'note') return s
+      if (s === 'pathology' || s === 'note') return s
       return f.group === 'pathology' ? 'pathology' : 'note'
     })()
+
+    // An explicitly negative panel (empty list, status "negative") is a documented
+    // negative, not missing data: remembered so hmr_tested is derived below.
+    if (f.key === 'hmr_mutations' && grounded && declaredStatus === 'negative' && value === null) hmrPanelNegative = true
+    // Entries outside the schema options were dropped by coerceValue: flag for review.
+    if (f.type === 'list' && Array.isArray(rawValue)) {
+      const offered = (rawValue as unknown[]).filter((s) => s && !isAbsenceToken(s)).length
+      const kept = Array.isArray(value) ? value.length : 0
+      if (offered > kept) listDropped.push(key)
+    }
 
     // Record provenance for every field the model spoke to.
     out.fields[key] = {
@@ -423,7 +450,29 @@ export function normalizeExtraction(raw: unknown, sourceText?: string): Extracti
       out.needsReview.push(key)
     }
   })
+
+  // A documented negative HMR panel means the panel was performed.
+  if (hmrPanelNegative && out.variables.hmr_tested === undefined) {
+    out.variables.hmr_tested = true
+    out.sources.hmr_tested = out.fields.hmr_mutations?.sourceTag || 'note'
+  }
+  listDropped.forEach((k) => { if (!out.needsReview.includes(k)) out.needsReview.push(k) })
+  resolveContradictions(out)
   return out
+}
+
+// Mutually exclusive extracted values never enter `variables` together: the
+// concrete result wins, the contradicted flag is removed, and both are flagged
+// for review so the clinician sees the conflict.
+function resolveContradictions(out: Extraction) {
+  const v = out.variables
+  const flag = (k: string) => { if (!out.needsReview.includes(k)) out.needsReview.push(k) }
+  const drop = (k: string, keep: string) => { delete v[k]; delete out.sources[k]; flag(k); flag(keep) }
+  const driverPos = isPos(v.jak2_v617f) || isPos(v.jak2_exon12) || (!!v.calr && v.calr !== 'negative') || isPos(v.mpl)
+  if (v.triple_negative === true && driverPos) drop('triple_negative', isPos(v.jak2_v617f) ? 'jak2_v617f' : isPos(v.jak2_exon12) ? 'jak2_exon12' : isPos(v.mpl) ? 'mpl' : 'calr')
+  if (v.hmr_tested === false && Array.isArray(v.hmr_mutations) && v.hmr_mutations.length) drop('hmr_tested', 'hmr_mutations')
+  if (v.splenomegaly === false && (num(v.spleen_cm) || 0) > 0) drop('splenomegaly', 'spleen_cm')
+  if (v.prior_thrombosis === false && v.thrombosis_type !== undefined) drop('prior_thrombosis', 'thrombosis_type')
 }
 
 // ---------------------------------------------------------------- stage 4
@@ -460,7 +509,8 @@ function driverLabel(v: Variables): string {
   if (isPos(v.jak2_exon12)) parts.push('JAK2 exon12+')
   if (v.calr && v.calr !== 'negative') parts.push('CALR ' + v.calr)
   if (isPos(v.mpl)) parts.push('MPL+')
-  if (truthy(v.triple_negative)) parts.push('triple-negative')
+  // "triple-negative" only describes a case with NO positive driver
+  if (!parts.length && truthy(v.triple_negative)) parts.push('triple-negative')
   return parts.join(', ')
 }
 
@@ -521,14 +571,18 @@ function evalPV(v: Variables): DiseaseEval {
   const blasts = num(v.peripheral_blasts)
   const blastPhase = blasts !== null && blasts >= 20
 
+  // BCR-ABL1 positivity defines CML and excludes a PV classification (as it
+  // already does for ET and overt MF).
+  const cml = v.bcr_abl1 === 'positive'
+
   // Pathway B (marrow waiver) applies only when the marrow is unavailable — never
   // when it is documented and contradicts PV (major2 not_met).
-  const confirmed = !blastPhase && ((major1 === 'met' && major2 === 'met' && major3 === 'met') ||
+  const confirmed = !blastPhase && !cml && ((major1 === 'met' && major2 === 'met' && major3 === 'met') ||
     (hbHigh && major3 === 'met' && minor === 'met' && major2 !== 'not_met'))
 
   // A JAK2 mutation is obligatory; absent erythrocytosis without marked counts,
-  // and blast phase, also exclude PV.
-  const hardExcluded = major3 === 'not_met' || (major1 === 'not_met' && !hbHigh) || blastPhase
+  // blast phase, and BCR-ABL1 positivity also exclude PV.
+  const hardExcluded = major3 === 'not_met' || (major1 === 'not_met' && !hbHigh) || blastPhase || cml
   const definingMet = major1 === 'met' || hbHigh || major3 === 'met'
   // Suspicious only when gaps are unavailable — a documented non-PV marrow (major2
   // not_met) is a contradiction, not a gap.
@@ -577,9 +631,10 @@ function evalET(v: Variables, pvConfirmed: boolean): DiseaseEval {
   // Major 4 — a driver mutation
   const major4 = tri(driverKnown, anyDriverPos)
 
-  // Minor — clonal marker or documented absence of reactive thrombocytosis
-  const minorKnown = v.clonal_marker_present !== undefined || v.reactive_cause_excluded !== undefined
-  const minorMet = truthy(v.clonal_marker_present) || truthy(v.reactive_cause_excluded)
+  // Minor — clonal marker or documented absence of reactive THROMBOCYTOSIS.
+  // (reactive_cause_excluded is the MF fibrosis exclusion and is a different question.)
+  const minorKnown = v.clonal_marker_present !== undefined || v.reactive_thrombocytosis_excluded !== undefined
+  const minorMet = truthy(v.clonal_marker_present) || truthy(v.reactive_thrombocytosis_excluded)
   const minor = tri(minorKnown, minorMet)
 
   // driver OR minor requirement, resolved as a tri-state
@@ -599,7 +654,7 @@ function evalET(v: Variables, pvConfirmed: boolean): DiseaseEval {
     { disease: 'ET', tier: 'major', label: 'BM: proliferation of enlarged mature megakaryocytes; no relevant reticulin fibrosis', status: major2, detail: (mp ? String(mp).replace(/_/g, ' ') : '') + (fib !== null ? ', MF-' + fib : '') },
     { disease: 'ET', tier: 'major', label: 'Does not meet WHO criteria for PV, overt MF, BCR-ABL1+ CML, or MDS', status: major3, detail: pvConfirmed ? 'meets PV' : (v.bcr_abl1 === 'positive' ? 'BCR-ABL1+' : (fib !== null && fib >= 2 ? 'fibrosis ≥grade 2' : '')) },
     { disease: 'ET', tier: 'major', label: 'JAK2, CALR, or MPL mutation', status: major4, detail: driverLabel(v) },
-    { disease: 'ET', tier: 'minor', label: 'Clonal marker present, or reactive thrombocytosis excluded', status: minor, detail: truthy(v.clonal_marker_present) ? 'clonal marker present' : (truthy(v.reactive_cause_excluded) ? 'reactive cause excluded' : '') },
+    { disease: 'ET', tier: 'minor', label: 'Clonal marker present, or reactive thrombocytosis excluded', status: minor, detail: truthy(v.clonal_marker_present) ? 'clonal marker present' : (truthy(v.reactive_thrombocytosis_excluded) ? 'reactive thrombocytosis excluded' : '') },
   ]
   return { criteria, confirmed, suspicious, hardExcluded }
 }
@@ -615,7 +670,11 @@ function evalMF(v: Variables, pvConfirmed: boolean, etConfirmed: boolean): Disea
   const hb = num(v.hemoglobin)
   const wbc = num(v.wbc)
   const ldh = num(v.ldh)
-  const uln = num(v.ldh_uln) || 250
+  // A reference upper limit must be positive; anything else falls back to the
+  // documented default of 250 U/L (a ≤0 ULN would make every LDH "elevated").
+  const ulnRaw = num(v.ldh_uln)
+  const ulnAssumed = ulnRaw === null || ulnRaw <= 0
+  const uln = ulnAssumed ? 250 : ulnRaw
   const fib = fibGrade(v)
   const mp = v.megakaryocyte_pattern
   const blasts = num(v.peripheral_blasts)
@@ -669,7 +728,7 @@ function evalMF(v: Variables, pvConfirmed: boolean, etConfirmed: boolean): Disea
     { disease: 'MF', tier: 'minor', label: 'Anemia not attributed to a comorbid condition', status: mAnemia, detail: hb !== null ? 'Hb ' + hb : '' },
     { disease: 'MF', tier: 'minor', label: 'Leukocytosis ≥11 ×10⁹/L', status: mLeuko, detail: wbc !== null ? wbc + ' ×10⁹/L' : '' },
     { disease: 'MF', tier: 'minor', label: 'Palpable splenomegaly', status: mSpleen, detail: v.spleen_cm ? v.spleen_cm + ' cm' : (truthy(v.splenomegaly) ? 'present' : '') },
-    { disease: 'MF', tier: 'minor', label: 'LDH above reference range', status: mLDH, detail: ldh !== null ? ldh + ' U/L (ULN ' + uln + ')' : '' },
+    { disease: 'MF', tier: 'minor', label: 'LDH above reference range', status: mLDH, detail: ldh !== null ? ldh + ' U/L (ULN ' + uln + (ulnAssumed ? ' assumed' : '') + ')' : '' },
     { disease: 'MF', tier: 'minor', label: 'Leukoerythroblastosis', status: mLEB, detail: truthy(v.leukoerythroblastosis) ? 'present' : '' },
   ]
   return { criteria, confirmed, suspicious, hardExcluded }
@@ -747,6 +806,14 @@ export function diagnose(v: Variables): Diagnosis {
   const pvErythrocytosis = pv.criteria[0]?.status === 'met'
   if (!pv.confirmed && (et.confirmed || mf.confirmed) && pvErythrocytosis) {
     caveats.push('Concurrent erythrocytosis is present alongside another confirmed MPN; consider masked or post-PV disease and correlate clinically.')
+  }
+  if (v.bcr_abl1 === 'positive') caveats.push('BCR-ABL1 is positive: this defines chronic myeloid leukemia and excludes classification as PV, ET, or overt MF.')
+  if ((pv.confirmed || pv.suspicious) && (v.red_cell_mass === 'normal' || v.epo === 'high')) {
+    caveats.push('A normal red cell mass or an elevated serum erythropoietin argues against polycythemia vera; consider relative or secondary erythrocytosis.')
+  }
+  const hbCaveat = num(v.hemoglobin)
+  if (truthy(v.transfusion_dependent) && hbCaveat !== null && hbCaveat >= 12) {
+    caveats.push('Transfusion dependence is recorded with a hemoglobin of ' + hbCaveat + ' g/dL; confirm, as a recent transfusion can mask anemia grading.')
   }
   if (outcome !== 'none') caveats.push('WHO minor criteria and reactive causes should be confirmed on repeat determination; single-timepoint data cannot establish sustained findings.')
 
@@ -1554,7 +1621,7 @@ export const EXAMPLES: Record<string, Example> = {
     inputs: {
       age: 48, sex: 'female', hemoglobin: 13.5, hematocrit: 40, wbc: 8.9, platelets: 812, ldh: 210, ldh_uln: 250, peripheral_blasts: 0, epo: 'normal',
       jak2_v617f: 'positive', jak2_exon12: 'negative', calr: 'negative', mpl: 'negative', bcr_abl1: 'negative',
-      bm_cellularity: 'normocellular', megakaryocyte_pattern: 'large_mature', reticulin_fibrosis_grade: '0', reactive_cause_excluded: true,
+      bm_cellularity: 'normocellular', megakaryocyte_pattern: 'large_mature', reticulin_fibrosis_grade: '0', reactive_thrombocytosis_excluded: true,
       constitutional_symptoms: false, splenomegaly: false, prior_thrombosis: false, cv_risk_factors: false,
       clinical_note: '48-year-old woman with incidentally discovered thrombocytosis on a pre-operative CBC. Asymptomatic; no bleeding, no thrombosis, no vasomotor symptoms. No splenomegaly on exam. No cardiovascular risk factors. Reactive causes excluded (ferritin normal, CRP normal, no infection or inflammation).',
       pathology_report: "Bone marrow core biopsy: normocellular for age. Marked proliferation of enlarged, mature megakaryocytes with hyperlobulated 'staghorn' nuclei, predominantly loosely scattered. No significant left shift in granulopoiesis or erythropoiesis. Reticulin stain MF-0, no fibrosis. No increase in blasts. Morphology consistent with essential thrombocythemia.",

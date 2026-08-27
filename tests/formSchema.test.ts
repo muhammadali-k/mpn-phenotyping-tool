@@ -5,7 +5,7 @@
  */
 import {
   applyChange, reconcile, engineVariables, isVisible, deriveTripleNegative, anyMolecularTestOpen,
-  UI_DRIVER_TESTED, UI_KARYOTYPE_TESTED, type FormState,
+  validateForm, hasBlockingErrors, UI_DRIVER_TESTED, UI_KARYOTYPE_TESTED, type FormState,
 } from '../src/components/tool/formSchema.ts'
 import { EXAMPLES, FIELD_BY_KEY } from '../src/lib/engine.ts'
 import { suite, test, eq, assert, report } from './harness.ts'
@@ -167,6 +167,36 @@ suite('Engine payload', () => {
   test('the MF example (HMR mutation listed, no panel flag) seeds a consistent panel state', () => {
     const f = reconcile(exampleForm('mf'))
     eq(f.hmr_tested, true)
+  })
+})
+
+// ============================================================ plausibility validation
+suite('Plausibility validation (unit and typing slips)', () => {
+  test('hemoglobin in g/L, hematocrit as a fraction, platelets and WBC in cells/µL are blocked with unit hints', () => {
+    const v = validateForm({ hemoglobin: 145, hematocrit: 0.52, platelets: 245000, wbc: 6800 })
+    ;['hemoglobin', 'hematocrit', 'platelets', 'wbc'].forEach((k) => {
+      eq(v[k]?.level, 'error', k)
+      assert(v[k].message.includes('not'), k + ' message names the wrong unit')
+    })
+    assert(hasBlockingErrors(v), 'blocks the run')
+  })
+  test('impossible values are blocked: negative ULN, blasts over 100, age over 120', () => {
+    const v = validateForm({ ldh_uln: -250, peripheral_blasts: 135, age: 450 })
+    eq(v.ldh_uln?.level, 'error'); eq(v.peripheral_blasts?.level, 'error'); eq(v.age?.level, 'error')
+  })
+  test('plausible values pass; blanks are ignored', () => {
+    const v = validateForm({ hemoglobin: 14.5, hematocrit: 44, platelets: 245, wbc: 6.8, ldh: 300, ldh_uln: 250, age: 62, peripheral_blasts: 2 })
+    eq(Object.keys(v).length, 0)
+    eq(Object.keys(validateForm({})).length, 0)
+  })
+  test('hemoglobin / hematocrit disagreement warns but does not block', () => {
+    const v = validateForm({ hemoglobin: 17, hematocrit: 32 })
+    eq(v.hematocrit?.level, 'warn')
+    eq(hasBlockingErrors(v), false)
+  })
+  test('transfusion dependence with a normal hemoglobin warns', () => {
+    eq(validateForm({ transfusion_dependent: true, hemoglobin: 15 }).transfusion_dependent?.level, 'warn')
+    eq(validateForm({ transfusion_dependent: true, hemoglobin: 8 }).transfusion_dependent, undefined)
   })
 })
 

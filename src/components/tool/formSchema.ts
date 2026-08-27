@@ -122,6 +122,57 @@ export function isVisible(key: string, f: FormState): boolean {
   }
 }
 
+/* ---- plausibility: a value outside these bounds is impossible in the field's
+   unit and is almost always a unit slip (g/L for g/dL, a fraction for a percent,
+   cells/µL for ×10⁹/L) or a typing slip. Errors block the run; warnings do not. */
+export interface Validation { level: 'error' | 'warn'; message: string }
+export const RANGES: Record<string, { min: number; max: number; unitHint?: string }> = {
+  age: { min: 0, max: 120 },
+  spleen_cm: { min: 0, max: 40 },
+  hemoglobin: { min: 3, max: 25, unitHint: 'Enter g/dL (for example 14.5), not g/L (145).' },
+  hematocrit: { min: 10, max: 80, unitHint: 'Enter a percentage (for example 45), not a fraction (0.45).' },
+  wbc: { min: 0.1, max: 500, unitHint: 'Enter ×10⁹/L (for example 6.8), not cells/µL (6800).' },
+  platelets: { min: 1, max: 3000, unitHint: 'Enter ×10⁹/L (for example 245), not cells/µL (245000).' },
+  ldh: { min: 1, max: 20000 },
+  ldh_uln: { min: 50, max: 1000, unitHint: 'The reference upper limit must be a positive value in U/L.' },
+  peripheral_blasts: { min: 0, max: 100, unitHint: 'Blasts are a percentage of peripheral white cells (0 to 100).' },
+}
+
+export function validateForm(f: FormState): Record<string, Validation> {
+  const out: Record<string, Validation> = {}
+  Object.keys(RANGES).forEach((k) => {
+    const raw = f[k]
+    if (raw === undefined || raw === null || raw === '') return
+    const v = typeof raw === 'number' ? raw : Number(raw)
+    const r = RANGES[k]
+    if (!Number.isFinite(v)) { out[k] = { level: 'error', message: 'Enter a number.' }; return }
+    if (v < r.min || v > r.max) {
+      out[k] = { level: 'error', message: `Outside the plausible range ${r.min} to ${r.max}.${r.unitHint ? ' ' + r.unitHint : ''}` }
+    }
+  })
+  /* cross-checks (only when both values are individually plausible) */
+  const hb = num(f.hemoglobin), hct = num(f.hematocrit)
+  if (hb !== null && hct !== null && !out.hemoglobin && !out.hematocrit && Math.abs(hct - 3 * hb) > 9) {
+    out.hematocrit = { level: 'warn', message: `Hematocrit ${hct}% and hemoglobin ${hb} g/dL disagree (hematocrit is usually about 3 × hemoglobin); check both values.` }
+  }
+  if (f.transfusion_dependent === true && hb !== null && hb >= 12) {
+    out.transfusion_dependent = { level: 'warn', message: `Transfusion dependence with a hemoglobin of ${hb} g/dL; confirm, as a recent transfusion can mask anemia.` }
+  }
+  return out
+}
+export const hasBlockingErrors = (v: Record<string, Validation>) => Object.values(v).some((x) => x.level === 'error')
+
+/* ---- per-field guidance shown under the control */
+export const FIELD_HINTS: Record<string, string> = {
+  ldh_uln: 'If left blank, 250 U/L is assumed.',
+  karyotype_detail: 'Annotation only; karyotype risk is the scored field.',
+  cv_risk_factors: 'Recorded in the summary; not used in scoring.',
+  granulocytic_proliferation: 'Recorded in the summary; not used in scoring.',
+  decreased_erythropoiesis: 'Recorded in the summary; not used in scoring.',
+  reactive_thrombocytosis_excluded: 'Used for the ET minor criterion.',
+  reactive_cause_excluded: 'Used for the overt-MF clonality criterion.',
+}
+
 /* ---- engine payload: drop UI-only keys and blanks */
 export function engineVariables(f: FormState): FormState {
   const out: FormState = {}

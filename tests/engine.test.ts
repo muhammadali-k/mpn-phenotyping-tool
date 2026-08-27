@@ -157,7 +157,7 @@ suite('Reactive / secondary mimics → No confirmed MPN', () => {
   test('Reactive thrombocytosis — platelets high, drivers negative, reactive cause present', () => {
     const v: Variables = {
       platelets: 640, jak2_v617f: 'negative', jak2_exon12: 'negative', calr: 'negative', mpl: 'negative',
-      bcr_abl1: 'negative', reactive_cause_excluded: false, megakaryocyte_pattern: 'large_mature', reticulin_fibrosis_grade: '0',
+      bcr_abl1: 'negative', reactive_thrombocytosis_excluded: false, megakaryocyte_pattern: 'large_mature', reticulin_fibrosis_grade: '0',
     }
     const dx = diagnose(v)
     eq(dx.outcome, 'none')
@@ -491,6 +491,64 @@ suite('Diagnosis object integrity', () => {
   })
   test('disease names are the three in scope only', () => {
     eq(DISEASE_NAME.MF, 'Overt myelofibrosis')
+  })
+})
+
+// ============================================================ Audit regressions
+suite('Audit regressions: exclusions, guards, extraction consistency', () => {
+  test('BCR-ABL1 positive excludes PV even with a full PV profile', () => {
+    const dx = diagnose({ sex: 'male', hemoglobin: 19, jak2_v617f: 'positive', megakaryocyte_pattern: 'pleomorphic', epo: 'low', bcr_abl1: 'positive' })
+    eq(get(dx, 'PV').verdict, 'not')
+    eq(dx.outcome, 'none')
+    assert(dx.caveats.some((c) => c.includes('BCR-ABL1')), 'CML caveat present')
+  })
+  test('a non-positive LDH upper limit falls back to 250 and is labelled assumed', () => {
+    const base: Variables = { megakaryocyte_pattern: 'atypical_clustered', reticulin_fibrosis_grade: '3', jak2_v617f: 'positive', bcr_abl1: 'negative', ldh: 180 }
+    const neg = crit(diagnose({ ...base, ldh_uln: -250 }), 'MF', 'LDH')
+    eq(neg.status, 'not_met', 'LDH 180 is not above 250')
+    assert(neg.detail.includes('assumed'), 'detail says the ULN was assumed')
+    const given = crit(diagnose({ ...base, ldh_uln: 150 }), 'MF', 'LDH')
+    eq(given.status, 'met')
+    assert(!given.detail.includes('assumed'), 'a supplied ULN is not labelled assumed')
+  })
+  test('driverLabel never says triple-negative next to a positive driver', () => {
+    const dx = diagnose({ platelets: 600, megakaryocyte_pattern: 'large_mature', reticulin_fibrosis_grade: '0', jak2_v617f: 'positive', triple_negative: true, bcr_abl1: 'negative' })
+    const d = crit(dx, 'ET', 'JAK2, CALR').detail
+    assert(!d.includes('triple'), 'got: ' + d)
+  })
+  test('ET minor reads reactive THROMBOCYTOSIS exclusion, not the MF fibrosis field', () => {
+    const base: Variables = { platelets: 640, jak2_v617f: 'negative', jak2_exon12: 'negative', calr: 'negative', mpl: 'negative', bcr_abl1: 'negative', megakaryocyte_pattern: 'large_mature', reticulin_fibrosis_grade: '0' }
+    eq(crit(diagnose({ ...base, reactive_cause_excluded: true }), 'ET', 'Clonal marker').status, 'unavailable', 'fibrosis exclusion alone does not satisfy the ET minor')
+    eq(crit(diagnose({ ...base, reactive_thrombocytosis_excluded: true }), 'ET', 'Clonal marker').status, 'met')
+  })
+  test('an explicitly negative HMR panel (empty list, status negative) sets hmr_tested', () => {
+    const ext = normalizeExtraction({ variables: { hmr_mutations: [] }, fields: { hmr_mutations: { value: [], status: 'negative', snippet: 'no ASXL1, EZH2, SRSF2, IDH1, IDH2 or U2AF1 mutations detected', sourceTag: 'note' } } },
+      'NGS panel: no ASXL1, EZH2, SRSF2, IDH1, IDH2 or U2AF1 mutations detected.')
+    eq(ext.variables.hmr_tested, true)
+    assert(!('hmr_mutations' in ext.variables), 'no mutation list')
+  })
+  test('unlisted genes are dropped from hmr_mutations and flagged for review; aliases normalise', () => {
+    const ext = normalizeExtraction({ variables: { hmr_mutations: ['TET2', 'ASXL1', 'u2af1 q157'] } }, 'TET2, ASXL1 and U2AF1 Q157 mutations identified.')
+    eq(JSON.stringify(ext.variables.hmr_mutations), JSON.stringify(['ASXL1', 'U2AF1Q157']))
+    includes(ext.needsReview, 'hmr_mutations')
+  })
+  test('the model cannot claim a "structured" source', () => {
+    const ext = normalizeExtraction({ variables: { ldh: 450 }, sources: { ldh: 'structured' } }, 'LDH 450')
+    eq(ext.sources.ldh, 'note')
+  })
+  test('extracted contradictions are resolved toward the concrete result and flagged', () => {
+    const ext = normalizeExtraction({ variables: { triple_negative: true, jak2_v617f: 'positive', hmr_tested: false, hmr_mutations: ['ASXL1'], splenomegaly: false, spleen_cm: 6, prior_thrombosis: false, thrombosis_type: 'venous' } }, 'x')
+    assert(!('triple_negative' in ext.variables), 'triple_negative dropped'); eq(ext.variables.jak2_v617f, 'positive')
+    assert(!('hmr_tested' in ext.variables), 'hmr_tested=false dropped'); eq(JSON.stringify(ext.variables.hmr_mutations), JSON.stringify(['ASXL1']))
+    assert(!('splenomegaly' in ext.variables), 'splenomegaly=false dropped'); eq(ext.variables.spleen_cm, 6)
+    assert(!('prior_thrombosis' in ext.variables), 'prior_thrombosis=false dropped'); eq(ext.variables.thrombosis_type, 'venous')
+    ;['triple_negative', 'hmr_tested', 'splenomegaly', 'prior_thrombosis'].forEach((k) => includes(ext.needsReview, k))
+  })
+  test('caveats: normal red cell mass / high EPO with a PV profile; transfusion dependence with normal Hb', () => {
+    const dx = diagnose({ sex: 'male', hemoglobin: 19, jak2_v617f: 'positive', megakaryocyte_pattern: 'pleomorphic', red_cell_mass: 'normal', epo: 'high' })
+    assert(dx.caveats.some((c) => c.includes('argues against polycythemia vera')), 'RCM/EPO caveat')
+    const dx2 = diagnose({ transfusion_dependent: true, hemoglobin: 15 })
+    assert(dx2.caveats.some((c) => c.includes('Transfusion dependence')), 'transfusion caveat')
   })
 })
 

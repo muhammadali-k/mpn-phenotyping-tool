@@ -9,8 +9,8 @@ import { useApp } from '@/lib/store'
 import { Button, Eyebrow, StepMarker } from '@/components/ui/primitives'
 import { GateRow, StatusLine, VarField } from './fields'
 import {
-  anyMolecularTestOpen, applyChange, DRIVER_KEYS, hmrList, isUiKey, isVisible, KARYOTYPE_KEYS, reconcile,
-  TRIPLE_KEYS, UI_DRIVER_TESTED, UI_KARYOTYPE_TESTED, type FormState,
+  anyMolecularTestOpen, applyChange, DRIVER_KEYS, hasBlockingErrors, hmrList, isUiKey, isVisible, KARYOTYPE_KEYS, reconcile,
+  TRIPLE_KEYS, UI_DRIVER_TESTED, UI_KARYOTYPE_TESTED, validateForm, type FormState, type Validation,
 } from './formSchema'
 import { DeidPanel } from './DeidPanel'
 import { EntryModeModal, type EntryMode } from './EntryModeModal'
@@ -47,6 +47,16 @@ export function Tool() {
   const [entryModalOpen, setEntryModalOpen] = useState(false)
   const [toast, setToast] = useState('')
   const toastTimer = useRef<number | undefined>(undefined)
+  // keys the user has edited by hand in Step 2: a later extraction must not overwrite them
+  const userEdited = useRef<Set<string>>(new Set())
+
+  // every Step 2 edit invalidates a previously computed result so a stale
+  // diagnosis can never be viewed or exported after the inputs changed
+  function setFormUser(next: FormState) {
+    Object.keys(next).forEach((k) => { if (!isUiKey(k) && !sameValue((form[k] ?? '') as VarValue, (next[k] ?? '') as VarValue)) userEdited.current.add(k) })
+    setForm(next)
+    if (result) setResult(null)
+  }
 
   const flash = (m: string) => {
     setToast(m); window.clearTimeout(toastTimer.current)
@@ -75,6 +85,7 @@ export function Tool() {
   function reset() {
     setNote(''); setPath(''); setAttested(false); setOnFile({}); setExtracted(EMPTY_EXTRACT)
     setLastExtract(null); setForm({}); setResult(null); setError(''); setProgressText('')
+    userEdited.current = new Set()
   }
 
   function loadExample(k: keyof typeof EXAMPLES) {
@@ -86,17 +97,22 @@ export function Tool() {
       if (FIELD_BY_KEY[key]) structured[key] = inp[key] as VarValue
     })
     setOnFile(structured); setExtracted(EMPTY_EXTRACT); setAttested(true); setError('')
+    // a new case replaces any previous form and result outright
+    setForm({}); setResult(null); userEdited.current = new Set()
     flash(`Loaded ${EXAMPLES[k].label}`)
   }
 
   function initForm(ext: Extraction, base: Variables) {
-    const f: Record<string, VarValue | undefined> = {}
+    const f: FormState = {}
     FIELDS.forEach((field) => {
       const k = field.key
+      // a value the user typed by hand survives a (re-)extraction
+      if (userEdited.current.has(k) && form[k] !== undefined) { f[k] = form[k]; return }
       f[k] = base[k] !== undefined ? base[k] : ext.variables[k]
     })
     // enforce consistency + derive gates from whatever evidence was extracted
     setForm(reconcile(f))
+    setResult(null)
   }
 
   async function runExtraction() {
@@ -126,8 +142,10 @@ export function Tool() {
   }
 
   function skipToForm() {
-    setExtracted(EMPTY_EXTRACT)
-    initForm(EMPTY_EXTRACT, onFile)
+    // switching to manual entry keeps whatever is already on the form
+    // (extracted or hand-entered); only an empty form is seeded from on-file data
+    const hasValues = Object.keys(form).some((k) => !isUiKey(k) && form[k] !== undefined && form[k] !== '')
+    if (!hasValues) initForm(EMPTY_EXTRACT, onFile)
     setStep(2)
   }
 
@@ -174,8 +192,9 @@ export function Tool() {
   ]
 
   // a step is reachable if it's at or before the current step, or is an
-  // already-computed step (2 or 3 once a result exists).
-  const canGo = (i: number) => i + 1 <= step || (!!result && (i === 1 || i === 2))
+  // already-computed step (2 or 3 once a result exists). Navigation is frozen
+  // while an extraction is in flight so its completion cannot clobber edits.
+  const canGo = (i: number) => !busy && (i + 1 <= step || (!!result && (i === 1 || i === 2)))
 
   return (
     <div className="app-frame corners relative rounded-[14px] bg-surface">
@@ -216,11 +235,12 @@ export function Tool() {
               onExtract={runExtraction} onChangeEntryMode={() => setEntryModalOpen(true)}
               onOpenKeyModal={() => setKeyModalOpen(true)}
               onApplyRedaction={(n, p) => { setNote(n); setPath(p) }}
+              needsAck={!ackOk} onAcknowledge={setLlmAcknowledged}
             />
           )}
           {step === 2 && (
             <StepVariables
-              form={form} setForm={setForm} extracted={extracted} onFile={onFile} lastExtract={lastExtract}
+              form={form} setForm={setFormUser} extracted={extracted} onFile={onFile} lastExtract={lastExtract}
               onBack={() => setStep(1)} onRun={runDiagnosis}
             />
           )}
@@ -261,6 +281,7 @@ function StepReports(props: {
   providerName: string; getKeyUrl?: string
   progressText: string
   onExtract: () => void; onChangeEntryMode: () => void; onOpenKeyModal: () => void; onApplyRedaction: (n: string, p: string) => void
+  needsAck: boolean; onAcknowledge: (b: boolean) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const ta = 'scroll min-h-[130px] w-full resize-y rounded-[6px] border border-line-strong bg-surface2 px-3.5 py-3 text-[14px] leading-[1.6] outline-none transition-colors focus:border-focus focus:bg-surface'
@@ -305,6 +326,19 @@ function StepReports(props: {
           <input type="checkbox" checked={props.attested} onChange={(e) => props.setAttested(e.target.checked)} className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-accent" />
           <span className="text-[13px] text-muted"><strong className="text-ink">I confirm this text is de-identified.</strong> It contains no names, MRNs, dates of birth, contact details or other direct identifiers, and I am authorized to process it with a third-party model.</span>
         </label>
+
+        {/* the cloud-sharing acknowledgment is re-asked here whenever the current
+            provider needs it and it has not been given (for example after switching
+            from an on-device model to a cloud provider), so there is never a dead end */}
+        {props.needsAck && (
+          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-[8px] border border-line-strong bg-surface px-4 py-3">
+            <input type="checkbox" checked={false} onChange={(e) => props.onAcknowledge(e.target.checked)} className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-accent" />
+            <span className="text-[13px] leading-relaxed text-muted">
+              <strong className="text-ink">I understand this text will be shared with a third-party AI service.</strong>{' '}
+              {props.providerName} is an external provider outside our control, not firewall-protected, and not covered by a HIPAA Business Associate Agreement. I will use de-identified or synthetic text only.
+            </span>
+          </label>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2.5">
           <Button
@@ -392,6 +426,11 @@ function StepVariables({ form, setForm, extracted, onFile, lastExtract, onBack, 
     return 'structured'
   }
   const extractedKeys = Object.keys(extracted.variables)
+  const validation = validateForm(form)
+  const blocked = hasBlockingErrors(validation)
+  const errorLabels = Object.keys(validation).filter((k) => validation[k].level === 'error').map((k) => FIELD_BY_KEY[k]?.label || k)
+  const reviewKeys = (extracted.needsReview || []).filter((k) => FIELD_BY_KEY[k])
+  const reviewOf = (k: string) => reviewKeys.includes(k)
 
   return (
     <div>
@@ -410,25 +449,44 @@ function StepVariables({ form, setForm, extracted, onFile, lastExtract, onBack, 
         </div>
       )}
 
+      {reviewKeys.length > 0 && (
+        <div className="mt-4">
+          <StatusLine tone="warn">
+            <strong>Needs review ({reviewKeys.length}):</strong> {reviewKeys.map((k) => FIELD_BY_KEY[k].label).join(', ')}. The model addressed these, but the value could not be grounded in the text, was pending or not documented, or contradicted another finding. They were left blank or adjusted; confirm them before running.
+          </StatusLine>
+        </div>
+      )}
+
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         {GROUP_ORDER.map((group) => (
           <div key={group} className="rounded-[10px] border border-line bg-surface">
             <div className="border-b border-line px-4 py-3"><h4 className="text-[14px] font-semibold">{GROUP_LABEL[group]}</h4></div>
             <div className="space-y-4 px-4 py-4">
               {group === 'molecular'
-                ? <MolecularPanel form={form} setField={setField} sourceOf={sourceOf} />
+                ? <MolecularPanel form={form} setField={setField} sourceOf={sourceOf} reviewOf={reviewOf} />
                 : FIELDS.filter((f) => f.group === group && isVisible(f.key, form)).map((f) => (
-                    <VarField key={f.key} field={f} value={form[f.key]} source={sourceOf(f.key)} onChange={(v) => setField(f.key, v)} />
+                    <VarField key={f.key} field={f} value={form[f.key]} source={sourceOf(f.key)} onChange={(v) => setField(f.key, v)}
+                      validation={validation[f.key]} review={reviewOf(f.key)} />
                   ))}
             </div>
           </div>
         ))}
       </div>
 
+      {blocked && (
+        <div className="mt-5">
+          <StatusLine tone="warn">
+            <strong>Fix the highlighted values before running:</strong> {errorLabels.join(', ')}. Values outside the plausible range are usually a unit or typing slip and would silently change the assessment.
+          </StatusLine>
+        </div>
+      )}
+
       <div className="mt-6 flex flex-wrap items-center gap-2.5">
         <Button variant="ghost" onClick={onBack}>← Back to reports</Button>
         <div className="flex-1" />
-        <Button onClick={onRun}>Run diagnosis &amp; prognosis <ArrowRight aria-hidden size={15} /></Button>
+        <Button onClick={onRun} disabled={blocked} title={blocked ? 'Fix the highlighted values first' : 'Run diagnosis and prognosis'}>
+          Run diagnosis &amp; prognosis <ArrowRight aria-hidden size={15} />
+        </Button>
       </div>
     </div>
   )
@@ -438,11 +496,13 @@ function StepVariables({ form, setForm, extracted, onFile, lastExtract, onBack, 
    Guided entry: each test is a yes / no / unknown gate; its result fields appear
    only once the test is marked performed. Triple-negative status is derived from
    the driver results rather than asked separately, so it can never contradict them. */
-function MolecularPanel({ form, setField, sourceOf }: {
+function MolecularPanel({ form, setField, sourceOf, reviewOf }: {
   form: FormState
   setField: (k: string, v: VarValue | undefined) => void
   sourceOf: (k: string) => SourceTag | null
+  reviewOf: (k: string) => boolean
 }) {
+  const noValidation: Validation | null = null
   const driverOpen = form[UI_DRIVER_TESTED] === true
   const hmrOpen = form.hmr_tested === true
   const karyoOpen = form[UI_KARYOTYPE_TESTED] === true
@@ -477,7 +537,7 @@ function MolecularPanel({ form, setField, sourceOf }: {
         {driverOpen && (
           <div className={indent}>
             {DRIVER_KEYS.map((k) => (
-              <VarField key={k} field={FIELD_BY_KEY[k]} value={form[k]} source={sourceOf(k)} onChange={(v) => setField(k, v)} />
+              <VarField key={k} field={FIELD_BY_KEY[k]} value={form[k]} source={sourceOf(k)} onChange={(v) => setField(k, v)} validation={noValidation} review={reviewOf(k)} />
             ))}
             {driverStatus && <StatusLine tone={driverStatus.tone}>{driverStatus.text}</StatusLine>}
           </div>
@@ -490,7 +550,7 @@ function MolecularPanel({ form, setField, sourceOf }: {
           value={form.hmr_tested} onChange={(v) => setField('hmr_tested', v)} />
         {hmrOpen && (
           <div className={indent}>
-            <VarField field={withLabel('hmr_mutations', 'HMR mutations detected (select all that apply)')} value={form.hmr_mutations} source={sourceOf('hmr_mutations')} onChange={(v) => setField('hmr_mutations', v)} />
+            <VarField field={withLabel('hmr_mutations', 'HMR mutations detected (select all that apply)')} value={form.hmr_mutations} source={sourceOf('hmr_mutations')} onChange={(v) => setField('hmr_mutations', v)} review={reviewOf('hmr_mutations')} />
             <StatusLine tone={hmr.length ? 'info' : 'muted'}>
               {hmr.length
                 ? `${hmr.length} HMR mutation${hmr.length === 1 ? '' : 's'} recorded: ${hmr.join(', ')}.`
@@ -507,7 +567,7 @@ function MolecularPanel({ form, setField, sourceOf }: {
         {karyoOpen && (
           <div className={indent}>
             {KARYOTYPE_KEYS.map((k) => (
-              <VarField key={k} field={FIELD_BY_KEY[k]} value={form[k]} source={sourceOf(k)} onChange={(v) => setField(k, v)} />
+              <VarField key={k} field={FIELD_BY_KEY[k]} value={form[k]} source={sourceOf(k)} onChange={(v) => setField(k, v)} review={reviewOf(k)} />
             ))}
           </div>
         )}
@@ -516,7 +576,7 @@ function MolecularPanel({ form, setField, sourceOf }: {
       {/* 4. other clonal evidence: only knowable once some test is open */}
       {showClonal && (
         <div className="border-t border-line pt-5">
-          <VarField field={withLabel('clonal_marker_present', 'Other clonal marker present (non-driver)')} value={form.clonal_marker_present} source={sourceOf('clonal_marker_present')} onChange={(v) => setField('clonal_marker_present', v)} />
+          <VarField field={withLabel('clonal_marker_present', 'Other clonal marker present (non-driver)')} value={form.clonal_marker_present} source={sourceOf('clonal_marker_present')} onChange={(v) => setField('clonal_marker_present', v)} review={reviewOf('clonal_marker_present')} />
           <p className="mt-1.5 text-[12px] text-faint">Any additional clonal abnormality on sequencing or cytogenetics.</p>
         </div>
       )}

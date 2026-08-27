@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 import type { Field, SourceTag, VarValue } from '@/lib/engine'
 import { cx } from '@/lib/util'
+import { FIELD_HINTS, RANGES, type Validation } from './formSchema'
 
 // Non-actionable provenance tags — teal stays reserved for actionable affordances.
 const SRC_STYLE: Record<SourceTag, string> = {
@@ -19,13 +20,30 @@ function SourceTagChip({ src }: { src: SourceTag }) {
 
 // Fixed-height label row so every field's control starts at the same offset,
 // keeping the two side-by-side cards aligned row-to-row.
-function Label({ field, source, id }: { field: Field; source?: SourceTag | null; id?: string }) {
+function Label({ field, source, id, review }: { field: Field; source?: SourceTag | null; id?: string; review?: boolean }) {
   return (
     <span id={id} className="mb-1.5 flex min-h-[18px] items-baseline gap-2">
       <span className="text-[12.5px] font-medium leading-tight text-muted">{field.label}</span>
       {field.unit && <span className="whitespace-nowrap font-mono text-[10.5px] text-faint">{field.unit}</span>}
       <span className="flex-1" />
+      {review && <span className="rounded-[5px] border border-warn/40 bg-[color-mix(in_srgb,var(--c-warn)_12%,transparent)] px-1.5 py-[1px] font-mono text-[9.5px] uppercase tracking-[0.06em] text-warn">needs review</span>}
       {source && <SourceTagChip src={source} />}
+    </span>
+  )
+}
+
+/* guidance + validation under a control */
+function FieldFoot({ fieldKey, validation }: { fieldKey: string; validation?: Validation | null }) {
+  const hint = FIELD_HINTS[fieldKey]
+  if (!hint && !validation) return null
+  return (
+    <span className="mt-1.5 block space-y-1">
+      {validation && (
+        <span role={validation.level === 'error' ? 'alert' : undefined} className={cx('block text-[12px] leading-snug', validation.level === 'error' ? 'text-danger' : 'text-warn')}>
+          {validation.message}
+        </span>
+      )}
+      {hint && <span className="block text-[12px] leading-snug text-faint">{hint}</span>}
     </span>
   )
 }
@@ -39,29 +57,36 @@ export interface FieldProps {
   value: VarValue | undefined
   source?: SourceTag | null
   onChange: (v: VarValue | undefined) => void
+  validation?: Validation | null
+  review?: boolean
 }
 
-export function VarField({ field, value, source, onChange }: FieldProps) {
+export function VarField({ field, value, source, onChange, validation, review }: FieldProps) {
+  const invalid = validation?.level === 'error'
   // bool/list are <button> groups — not labelable by a wrapping <label>, so use
   // role="group" + aria-labelledby pointing at the field label.
   if (field.type === 'bool' || field.type === 'list') {
     const labelId = `lbl-${field.key}`
     return (
       <div role="group" aria-labelledby={labelId} className="block">
-        <Label field={field} source={source} id={labelId} />
+        <Label field={field} source={source} id={labelId} review={review} />
         {field.type === 'bool'
           ? <TriState value={value as boolean | undefined} onChange={onChange} labelId={labelId} />
           : <ChipMulti options={field.options || []} value={Array.isArray(value) ? (value as string[]) : []} onChange={onChange} labelId={labelId} />}
+        <FieldFoot fieldKey={field.key} validation={validation} />
       </div>
     )
   }
+  const range = RANGES[field.key]
   return (
     <label className="block">
-      <Label field={field} source={source} />
+      <Label field={field} source={source} review={review} />
       {field.type === 'number' && (
         <input
           type="number" step="any" inputMode="decimal"
-          className={cx(inputCls, 'font-mono tnum')}
+          min={range?.min} max={range?.max}
+          aria-invalid={invalid || undefined}
+          className={cx(inputCls, 'font-mono tnum', invalid && 'border-danger focus:border-danger', validation?.level === 'warn' && 'border-warn')}
           value={value === undefined || value === null ? '' : String(value)}
           onChange={(e) => onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
         />
@@ -88,6 +113,7 @@ export function VarField({ field, value, source, onChange }: FieldProps) {
           <ChevronDown aria-hidden size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-faint" />
         </div>
       )}
+      <FieldFoot fieldKey={field.key} validation={validation} />
     </label>
   )
 }
